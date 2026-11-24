@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>N-ADI v3 나스닥 백테스팅 & 실시간 추적 대시보드 (2000년 ~ 현재)</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Inter & Noto Sans KR Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans KR', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.6); }
+    input[type="range"] { accent-color: #10b981; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+  <!-- 상단 고정 퀀트 터미널 헤더 -->
+  <header class="sticky top-0 z-30 border-b border-slate-800/90 bg-slate-950/90 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 flex items-center justify-center text-slate-950 font-black tracking-tighter shadow-lg shadow-emerald-950/50 shrink-0 text-sm">
+          N-ADI<sub>3</sub>
+        </div>
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-base sm:text-xl font-extrabold tracking-tight text-white">
+              N-ADI<sub>v3</sub> 나스닥(NDX) 퀀트 백테스팅 &amp; 실시간 추적 터미널
+            </h1>
+            <span id="header-range-badge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 font-mono tabular-nums">
+              2000.01.01 – 2026.11.21
+            </span>
+            <span id="auto-sync-badge" class="text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700">
+              데이터 확인 중...
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">
+            6개월 연율화 모멘텀 · 1.5배 TIPS 민감도 · VXN 20일 이격 가속도 기반 3단계 동적 자산배분 백테스터
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          id="btn-sync-remote"
+          type="button"
+          class="px-3 py-2 text-xs font-bold rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 transition flex items-center gap-1.5"
+        >
+          <span>🔄</span>
+          <span>자동수집 새로고침</span>
+        </button>
+        <button
+          id="btn-open-modal"
+          type="button"
+          class="px-3 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition flex items-center gap-1.5 shadow-sm"
+        >
+          <span>✏️</span>
+          <span>오늘 지표 입력·갱신</span>
+        </button>
+        <button
+          id="btn-add-one-day"
+          type="button"
+          class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-100 transition flex items-center gap-1.5"
+        >
+          <span>+1일</span>
+          <span>시뮬레이션 추가</span>
+        </button>
+        <button
+          id="btn-reset-all"
+          type="button"
+          class="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 transition flex items-center gap-1.5"
+        >
+          <span>↺</span>
+          <span>초기화</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <!-- 알림 토스트 배너 -->
+    <div id="toast-banner" class="hidden rounded-2xl border border-emerald-700/70 bg-emerald-950/80 px-4 py-3 text-xs sm:text-sm font-semibold text-emerald-200 flex items-center justify-between gap-3 shadow-lg">
+      <div class="flex items-center gap-2">
+        <span>✅</span>
+        <span id="toast-message">데이터가 갱신되었습니다.</span>
+      </div>
+      <button id="btn-close-toast" type="button" class="text-emerald-300 hover:text-white font-bold">✕</button>
+    </div>
+
+    <!-- 1. 수식 & 현재 상태 배너 + 3단계 전술적 비중 배분 룰 -->
+    <section class="rounded-2xl border border-slate-800 bg-slate-900/90 p-4 sm:p-5 shadow-xl space-y-4">
+      <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+        <div class="space-y-2 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">N-ADI<sub>v3</sub> 업그레이드 수식</span>
+            <span class="text-[11px] font-mono text-slate-400">(바닥 매도 방지 + 1.5x 금리 민감도)</span>
+          </div>
+          <div class="font-mono text-xs sm:text-sm font-bold text-slate-100 bg-slate-950 px-3.5 py-2.5 rounded-xl border border-slate-800 overflow-x-auto whitespace-nowrap">
+            N-ADI<sub>v3</sub> = (g<sub>NDX,6M</sub> − g<sub>M2</sub>) + ((M2V − 1.40) / 0.10) − 1.5 × (r<sub>TIPS10</sub> − 1.64) − ((VXN − VXN<sub>20MA</sub>) / 5)
+          </div>
+        </div>
+
+        <!-- 현재 실시간 시그널 요약 박스 -->
+        <div class="rounded-xl border border-slate-700/80 bg-slate-950/90 px-4 py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 shrink-0">
+          <div>
+            <div id="banner-latest-date" class="text-[11px] font-mono text-slate-400">기준일: 2026-11-21</div>
+            <div class="flex items-baseline gap-2 mt-0.5">
+              <span id="banner-latest-score" class="text-2xl font-black font-mono tabular-nums text-rose-400">-3.10</span>
+              <span id="banner-latest-regime"></span>
+            </div>
+          </div>
+          <div class="h-9 w-px bg-slate-800 hidden sm:block"></div>
+          <div>
+            <div class="text-[11px] text-slate-400 font-semibold">권장 나스닥 전술 비중</div>
+            <div id="banner-latest-alloc" class="text-sm sm:text-base font-extrabold font-mono text-white mt-0.5 tabular-nums">
+              NDX 10% / 파킹 90%
+            </div>
+            <div id="banner-vxn-status" class="text-[11px] font-mono text-amber-300 mt-0.5">
+              VXN vs 20MA 점검 중...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3단계 전술적 비중 배분 룰 카드 -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-2 border-t border-slate-800/80">
+        <div class="rounded-xl bg-emerald-950/40 border border-emerald-800/60 p-3 flex items-start justify-between gap-2">
+          <div>
+            <div class="font-bold text-emerald-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>N-ADI<sub>v3</sub> &gt; +2.0 (강세·확장 국면)</span>
+            </div>
+            <div class="text-slate-300 mt-1">유동성 모멘텀 우위 + 실질금리 안정 + VXN 진정</div>
+          </div>
+          <span class="font-mono font-extrabold text-emerald-300 bg-emerald-900/60 px-2 py-1 rounded-lg shrink-0">NDX 100%</span>
+        </div>
+
+        <div class="rounded-xl bg-amber-950/35 border border-amber-800/60 p-3 flex items-start justify-between gap-2">
+          <div>
+            <div class="font-bold text-amber-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span>−2.0 ≤ N-ADI<sub>v3</sub> ≤ +2.0 (중립·혼조)</span>
+            </div>
+            <div class="text-slate-300 mt-1">모멘텀과 할인율 압박이 교차하는 전환 경계 구간</div>
+          </div>
+          <span class="font-mono font-extrabold text-amber-300 bg-amber-900/60 px-2 py-1 rounded-lg shrink-0">NDX 50% / 파킹 50%</span>
+        </div>
+
+        <div class="rounded-xl bg-rose-950/40 border border-rose-800/60 p-3 flex items-start justify-between gap-2">
+          <div>
+            <div class="font-bold text-rose-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+              <span>N-ADI<sub>v3</sub> &lt; −2.0 (긴축·방어 국면)</span>
+            </div>
+            <div class="text-slate-300 mt-1">실질금리 압박 또는 추세 꺾임 · 단기국채 이자 수취</div>
+          </div>
+          <span class="font-mono font-extrabold text-rose-300 bg-rose-900/60 px-2 py-1 rounded-lg shrink-0">NDX 10% / 파킹 90%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 2000~현재 장기 백테스팅 성과 비교 4대 KPI 카드 -->
+    <section aria-label="성과 비교 KPI 카드" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div class="rounded-2xl border border-emerald-700/60 bg-gradient-to-b from-emerald-950/40 to-slate-900 p-5 shadow-lg">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-emerald-300">N-ADI<sub>v3</sub> 전술 전략</span>
+          <span class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            핵심 업그레이드
+          </span>
+        </div>
+        <div class="mt-2.5 flex items-baseline gap-2 font-mono tabular-nums">
+          <span id="kpi-v3-cagr" class="text-2xl sm:text-3xl font-black text-emerald-400">+13.6%</span>
+          <span class="text-xs text-slate-400">연평균(CAGR)</span>
+        </div>
+        <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono tabular-nums">
+          <span class="text-slate-400">누적 <strong id="kpi-v3-cum" class="text-slate-100">-</strong></span>
+          <span class="text-emerald-300">MDD <strong id="kpi-v3-mdd">-16.8%</strong></span>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-sky-300">나스닥 100 단순 보유</span>
+          <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+            Buy &amp; Hold
+          </span>
+        </div>
+        <div class="mt-2.5 flex items-baseline gap-2 font-mono tabular-nums">
+          <span id="kpi-bh-cagr" class="text-2xl sm:text-3xl font-black text-sky-400">+9.4%</span>
+          <span class="text-xs text-slate-400">연평균(CAGR)</span>
+        </div>
+        <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono tabular-nums">
+          <span class="text-slate-400">누적 <strong id="kpi-bh-cum" class="text-slate-100">-</strong></span>
+          <span class="text-rose-400">MDD <strong id="kpi-bh-mdd">-78.4%</strong></span>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-slate-300">기존 ADI<sub>v2</sub> (0선 기준)</span>
+          <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+            비교 벤치마크
+          </span>
+        </div>
+        <div class="mt-2.5 flex items-baseline gap-2 font-mono tabular-nums">
+          <span id="kpi-v2-cagr" class="text-2xl sm:text-3xl font-black text-slate-200">+10.8%</span>
+          <span class="text-xs text-slate-400">연평균(CAGR)</span>
+        </div>
+        <div class="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono tabular-nums">
+          <span class="text-slate-400">누적 <strong id="kpi-v2-cum" class="text-slate-100">-</strong></span>
+          <span class="text-amber-400">MDD <strong id="kpi-v2-mdd">-31.5%</strong></span>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-bold text-violet-300">VXN vs 20MA 전술 트리거</span>
+          <span id="kpi-vxn-badge"></span>
+        </div>
+        <div class="mt-2.5 flex items-baseline gap-2 font-mono tabular-nums">
+          <span id="kpi-vxn-spread" class="text-2xl sm:text-3xl font-black text-white">-</span>
+          <span id="kpi-vxn-raw" class="text-xs text-slate-400">VXN - / 20MA -</span>
+        </div>
+        <div id="kpi-vxn-advice" class="mt-2.5 pt-2 border-t border-slate-800/80 text-xs text-slate-300 truncate">
+          변동성 가속도 분석 중...
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 듀얼 동기화 인터랙티브 HTML5 Canvas 차트 섹션 -->
+    <section aria-label="듀얼 동기화 백테스팅 차트" class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl space-y-4">
+      <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-base sm:text-lg font-extrabold text-white">
+              📊 누적 수익률 곡선 (Equity Curve) &amp; N-ADI<sub>v3</sub> 오실레이터
+            </h2>
+            <span id="chart-visible-span" class="text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-emerald-300 border border-slate-700 tabular-nums">
+              전체 구간
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">
+            드래그하여 구간 확대(Zoom) · 더블클릭으로 전체 복귀 · 마우스/터치 이동 시 상·하단 차트 십자선 동기화
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800 text-xs font-bold">
+            <button id="btn-scale-log" type="button" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 transition">
+              로그 스케일 (Log)
+            </button>
+            <button id="btn-scale-linear" type="button" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">
+              선형 스케일
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button data-preset="ALL" type="button" class="preset-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 text-emerald-400 transition">
+              전체 (2000~현재)
+            </button>
+            <button data-preset="10Y" type="button" class="preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition">
+              10년
+            </button>
+            <button data-preset="5Y" type="button" class="preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition">
+              5년
+            </button>
+            <button data-preset="1Y" type="button" class="preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition">
+              1년
+            </button>
+            <button data-preset="3M" type="button" class="preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition">
+              3개월
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 마일스톤 퀵 점프 & 오실레이터 구성요소 오버레이 토글 -->
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 pt-2 border-t border-slate-800/80 text-xs">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="font-bold text-slate-400 mr-1">주요 위기/국면 점프:</span>
+          <button data-jump="2000-01-01,2003-03-31" type="button" class="jump-btn px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold transition">
+            2000–02 닷컴버블
+          </button>
+          <button data-jump="2007-10-01,2009-06-30" type="button" class="jump-btn px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold transition">
+            2008 금융위기
+          </button>
+          <button data-jump="2020-01-01,2020-09-30" type="button" class="jump-btn px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold transition">
+            2020 팬데믹
+          </button>
+          <button data-jump="2021-11-01,2023-03-31" type="button" class="jump-btn px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 font-semibold transition">
+            2022 금리인상기
+          </button>
+          <button data-jump="2025-09-01,2027-12-31" type="button" class="jump-btn px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-emerald-300 font-semibold transition">
+            2025–현재 AI·긴축장
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="font-bold text-slate-400 mr-1">하단 4대 항 오버레이:</span>
+          <button id="toggle-c1" type="button" class="comp-toggle px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 font-semibold transition">
+            ① 6M 모멘텀
+          </button>
+          <button id="toggle-c2" type="button" class="comp-toggle px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 font-semibold transition">
+            ② M2V 회전
+          </button>
+          <button id="toggle-c3" type="button" class="comp-toggle px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 font-semibold transition">
+            ③ 1.5x TIPS
+          </button>
+          <button id="toggle-c4" type="button" class="comp-toggle px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 font-semibold transition">
+            ④ VXN 가속도
+          </button>
+        </div>
+      </div>
+
+      <!-- 범례 바 -->
+      <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono bg-slate-950/80 px-3.5 py-2 rounded-xl border border-slate-800/80">
+        <div class="flex flex-wrap items-center gap-4">
+          <span class="inline-flex items-center gap-1.5 text-emerald-400 font-bold">
+            <span class="w-3 h-0.5 bg-emerald-400 inline-block"></span> N-ADI<sub>v3</sub> 전략 (초기 100)
+          </span>
+          <span class="inline-flex items-center gap-1.5 text-sky-400 font-semibold">
+            <span class="w-3 h-0.5 bg-sky-400 inline-block"></span> 나스닥 100 단순보유 (초기 100)
+          </span>
+          <span class="inline-flex items-center gap-1.5 text-slate-400">
+            <span class="w-3 h-0.5 border-t border-dashed border-slate-400 inline-block"></span> 기존 ADI<sub>v2</sub> (0선 기준)
+          </span>
+        </div>
+        <div class="flex items-center gap-3 text-slate-400">
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-emerald-500/20 border border-emerald-500/40 inline-block"></span> 100% NDX</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-amber-500/20 border border-amber-500/40 inline-block"></span> 50% NDX</span>
+          <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-rose-500/20 border border-rose-500/40 inline-block"></span> 10% NDX / 90% 파킹</span>
+        </div>
+      </div>
+
+      <!-- 듀얼 캔버스 컨테이너 -->
+      <div id="dual-chart-container" class="relative space-y-2.5 select-none">
+        <div id="equity-chart-wrapper" class="relative w-full h-[290px] sm:h-[340px] rounded-xl border border-slate-800 bg-slate-950 overflow-hidden cursor-crosshair">
+          <canvas id="equityCanvas"></canvas>
+        </div>
+
+        <div id="osc-chart-wrapper" class="relative w-full h-[220px] sm:h-[250px] rounded-xl border border-slate-800 bg-slate-950 overflow-hidden cursor-crosshair">
+          <canvas id="oscCanvas"></canvas>
+        </div>
+
+        <!-- 동기화 플로팅 툴팁 -->
+        <div
+          id="sync-tooltip"
+          class="pointer-events-none hidden absolute z-30 w-72 sm:w-80 rounded-xl border border-slate-700 bg-slate-900/95 backdrop-blur-md p-3.5 shadow-2xl text-xs"
+        >
+          <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-2">
+            <span id="tt-date" class="font-mono font-bold text-white">-</span>
+            <span id="tt-regime"></span>
+          </div>
+          <div id="tt-event" class="hidden mb-2 px-2 py-1 rounded-lg bg-emerald-950/90 border border-emerald-800/70 text-emerald-300 font-semibold text-[11px]"></div>
+
+          <div class="grid grid-cols-2 gap-2 pb-2 mb-2 border-b border-slate-800 font-mono tabular-nums">
+            <div>
+              <div class="text-[10px] font-sans text-slate-400">N-ADI<sub>v3</sub> 점수</div>
+              <div id="tt-score" class="text-base font-black">-</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] font-sans text-slate-400">목표 나스닥 비중</div>
+              <div id="tt-alloc" class="text-sm font-extrabold text-white mt-0.5">-</div>
+            </div>
+          </div>
+
+          <div class="space-y-1 font-mono text-[11px] tabular-nums pb-2 mb-2 border-b border-slate-800">
+            <div class="flex justify-between">
+              <span class="font-sans text-emerald-400 font-semibold">N-ADI<sub>v3</sub> 누적지수:</span>
+              <span id="tt-eq-v3" class="font-bold text-emerald-300">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-sans text-sky-400">NDX 단순보유 지수:</span>
+              <span id="tt-eq-bh" class="text-sky-300">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-sans text-slate-400">NDX 지수 / 파킹금리:</span>
+              <span id="tt-ndx-rf" class="text-slate-300">-</span>
+            </div>
+          </div>
+
+          <div class="space-y-1 font-mono text-[11px] tabular-nums">
+            <div class="flex justify-between">
+              <span class="font-sans text-slate-400">① 6M 모멘텀 초과:</span>
+              <span id="tt-c1" class="font-semibold">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-sans text-slate-400">② M2V 회전 보정:</span>
+              <span id="tt-c2" class="font-semibold">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-sans text-slate-400">③ 1.5x TIPS 압박:</span>
+              <span id="tt-c3" class="font-semibold">-</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="font-sans text-slate-400">④ VXN 가속도 필터:</span>
+              <span id="tt-c4" class="font-semibold">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 하단 미니맵 브러시 내비게이터 -->
+      <div class="space-y-1">
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span>전체 2000~현재 시계열 내비게이터 (클릭·드래그로 시점 이동)</span>
+          <span id="minimap-hint" class="font-mono">2000-01-01 ~ 현재</span>
+        </div>
+        <div id="minimap-wrapper" class="relative w-full h-12 rounded-xl border border-slate-800 bg-slate-950 overflow-hidden cursor-ew-resize select-none">
+          <canvas id="minimapCanvas"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 실시간 What-If 6변수 시뮬레이터 -->
+    <section aria-label="What-If 시뮬레이터" class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-slate-800 pb-3.5">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-base sm:text-lg font-extrabold text-white">
+              🎛️ N-ADI<sub>v3</sub> 실시간 What-If 시뮬레이터 (6대 변수 민감도)
+            </h2>
+            <span id="sim-status-badge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+              원본 시계열 반영 중
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">
+            슬라이더를 조절해 최신 일자 기준 <strong>N-ADI<sub>v3</sub> 점수, 권장 나스닥 비중, VXN 20일 이격 트리거</strong> 변화를 즉시 시뮬레이션합니다.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 bg-slate-950 px-4 py-2.5 rounded-xl border border-slate-800">
+          <div>
+            <div class="text-[11px] text-slate-400">시뮬레이션 N-ADI<sub>v3</sub></div>
+            <div class="flex items-baseline gap-2 font-mono tabular-nums">
+              <span id="sim-latest-score" class="text-xl font-black text-emerald-400">-</span>
+              <span id="sim-latest-delta" class="text-xs font-semibold text-slate-400">(Δ 0.00)</span>
+            </div>
+          </div>
+          <div class="h-8 w-px bg-slate-800"></div>
+          <div>
+            <div class="text-[11px] text-slate-400">목표 비중 전환</div>
+            <div id="sim-latest-alloc" class="text-xs sm:text-sm font-extrabold font-mono text-white mt-0.5">
+              NDX 10% / 파킹 90%
+            </div>
+          </div>
+          <button
+            id="btn-reset-whatif"
+            type="button"
+            class="ml-1 px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition"
+          >
+            오프셋 0 리셋
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+        <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <label for="slider-g-ndx" class="font-bold text-slate-200">g<sub>NDX,6M</sub> (나스닥 6M 연율화)</label>
+            <span id="val-g-ndx" class="font-mono font-bold text-emerald-400 tabular-nums">+0.0%p</span>
+          </div>
+          <input id="slider-g-ndx" type="range" min="-35" max="35" step="0.5" value="0" class="w-full cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+            <span>-35%p</span><span>모멘텀 민감도</span><span>+35%p</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <label for="slider-g-m2" class="font-bold text-slate-200">g<sub>M2</sub> (미국 M2 YoY)</label>
+            <span id="val-g-m2" class="font-mono font-bold text-emerald-400 tabular-nums">+0.0%p</span>
+          </div>
+          <input id="slider-g-m2" type="range" min="-15" max="15" step="0.2" value="0" class="w-full cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+            <span>-15%p</span><span>유동성 기준선</span><span>+15%p</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <label for="slider-m2v" class="font-bold text-slate-200">M2V (통화유통속도)</label>
+            <span id="val-m2v" class="font-mono font-bold text-violet-400 tabular-nums">+0.000</span>
+          </div>
+          <input id="slider-m2v" type="range" min="-0.25" max="0.25" step="0.005" value="0" class="w-full cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+            <span>-0.250</span><span>기준 1.40</span><span>+0.250</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <label for="slider-tips" class="font-bold text-slate-200">r<sub>TIPS10</sub> (1.5배 금리 가중)</label>
+            <span id="val-tips" class="font-mono font-bold text-amber-400 tabular-nums">+0.00%p</span>
+          </div>
+          <input id="slider-tips" type="range" min="-2.5" max="2.5" step="0.05" value="0" class="w-full cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+            <span>-2.50%p</span><span>1.5×(TIPS−1.64)</span><span>+2.50%p</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <label for="slider-vxn" class="font-bold text-slate-200">VXN (나스닥 변동성 지수)</label>
+            <span id="val-vxn" class="font-mono font-bold text-rose-400 tabular-nums">+0.0pt</span>
+          </div>
+          <input id="slider-vxn" type="range" min="-20" max="30" step="0.5" value="0" class="w-full cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+            <span>-20pt (진정)</span><span>현재 변동성</span><span>+30pt (급등)</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-800 bg-slate-950/70 p-3.5 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <label for="slider-vxn-ma" class="font-bold text-slate-200">VXN<sub>20MA</sub> (20일 이동평균)</label>
+            <span id="val-vxn-ma" class="font-mono font-bold text-cyan-400 tabular-nums">+0.0pt</span>
+          </div>
+          <input id="slider-vxn-ma" type="range" min="-15" max="20" step="0.5" value="0" class="w-full cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-500 font-mono">
+            <span>-15pt</span><span>−(VXN−20MA)/5</span><span>+20pt</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 역사적 주요 위기·국면별 백테스팅 성과 요약 테이블 -->
+    <section aria-label="국면별 백테스팅 요약" class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl space-y-3">
+      <div>
+        <h2 class="text-base sm:text-lg font-extrabold text-white">
+          🛡️ 2000~현재 주요 시장 국면별 낙폭 방어 &amp; 수익률 비교표
+        </h2>
+        <p class="text-xs text-slate-400 mt-0.5">
+          실제 시계열 백테스팅 엔진에서 산출된 구간별 수익률 및 최대낙폭(MDD) 자동 집계 결과입니다.
+        </p>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
+        <table class="min-w-full divide-y divide-slate-800 text-xs">
+          <thead class="bg-slate-950 text-slate-300 font-bold">
+            <tr>
+              <th class="px-3.5 py-2.5 text-left whitespace-nowrap">시장 국면 및 기간</th>
+              <th class="px-3.5 py-2.5 text-right whitespace-nowrap">NDX 단순보유 수익률</th>
+              <th class="px-3.5 py-2.5 text-right whitespace-nowrap">NDX 구간 MDD</th>
+              <th class="px-3.5 py-2.5 text-right whitespace-nowrap text-emerald-400">N-ADI<sub>v3</sub> 전략 수익률</th>
+              <th class="px-3.5 py-2.5 text-right whitespace-nowrap text-emerald-400">N-ADI<sub>v3</sub> 구간 MDD</th>
+              <th class="px-3.5 py-2.5 text-right whitespace-nowrap text-slate-400">기존 ADI<sub>v2</sub> 수익률</th>
+              <th class="px-3.5 py-2.5 text-left whitespace-nowrap">핵심 작동 메커니즘</th>
+            </tr>
+          </thead>
+          <tbody id="regime-summary-body" class="divide-y divide-slate-800/80 font-mono tabular-nums bg-slate-900">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 6. 검색·필터 가능 일별 백테스팅 로그 테이블 + CSV 다운로드 -->
+    <section aria-label="일별 백테스팅 로그 테이블" class="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h2 class="text-base sm:text-lg font-extrabold text-white">
+            📋 일별 N-ADI<sub>v3</sub> 시그널 &amp; 백테스팅 로그 테이블
+          </h2>
+          <p class="text-xs text-slate-400">
+            날짜·이벤트 검색(예: <code class="font-mono text-emerald-300">2008-11</code>, <code class="font-mono text-emerald-300">2026-11</code>) 및 국면 필터링 후 전체 CSV 내보내기를 지원합니다.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <input
+            id="table-search"
+            type="text"
+            placeholder="날짜 또는 이벤트 검색..."
+            class="px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-950 text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-48 sm:w-56"
+          />
+          <select
+            id="table-regime-filter"
+            aria-label="국면 필터"
+            class="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-700 bg-slate-950 text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            <option value="ALL">전체 전술 국면</option>
+            <option value="AGGRESSIVE">강세·확장 (&gt; +2.0 · NDX 100%)</option>
+            <option value="NEUTRAL">중립·혼조 (-2.0 ~ +2.0 · NDX 50%)</option>
+            <option value="DEFENSIVE">긴축·방어 (&lt; -2.0 · NDX 10%)</option>
+            <option value="VXN_COOLING">VXN 20MA 하회 진정일만</option>
+            <option value="CUSTOM">자동수집 · 직접입력일만</option>
+          </select>
+          <button
+            id="btn-export-csv"
+            type="button"
+            class="px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition flex items-center gap-1.5 shadow-sm"
+          >
+            <span>⬇</span>
+            <span>CSV 다운로드</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <div id="table-count-info" class="tabular-nums">데이터 로드 중...</div>
+        <div class="flex items-center gap-1.5">
+          <button
+            id="btn-prev-page"
+            type="button"
+            class="px-2.5 py-1 rounded-lg border border-slate-700 hover:bg-slate-800 disabled:opacity-40 font-semibold text-slate-200"
+          >
+            이전
+          </button>
+          <span id="page-indicator" class="px-2 font-mono font-semibold text-slate-200 tabular-nums">1 / 1</span>
+          <button
+            id="btn-next-page"
+            type="button"
+            class="px-2.5 py-1 rounded-lg border border-slate-700 hover:bg-slate-800 disabled:opacity-40 font-semibold text-slate-200"
+          >
+            다음
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
+        <table class="min-w-full divide-y divide-slate-800 text-xs">
+          <thead class="bg-slate-950 text-slate-300 font-bold">
+            <tr>
+              <th class="px-3 py-2.5 text-left whitespace-nowrap">날짜</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">N-ADI<sub>v3</sub></th>
+              <th class="px-3 py-2.5 text-center whitespace-nowrap">전술 국면</th>
+              <th class="px-3 py-2.5 text-center whitespace-nowrap">NDX 목표비중</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap text-emerald-400">v3 누적지수</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap text-sky-400">NDX 누적지수</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">①6M모멘텀</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">②M2V</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">③1.5xTIPS</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">④VXN가속</th>
+              <th class="px-3 py-2.5 text-right whitespace-nowrap">VXN / 20MA</th>
+            </tr>
+          </thead>
+          <tbody id="adi-table-body" class="divide-y divide-slate-800/70 font-mono tabular-nums bg-slate-900">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-4 text-xs text-slate-400 leading-relaxed">
+      <p>
+        ※ 2000-01-01 ~ 2026-11-21 기준 시계열 위에 GitHub Actions가 매일 수집하는 <code class="font-mono text-emerald-300">data.json</code> 실제 시세·거시 데이터를 자동 병합하여 백테스팅 곡선을 최신화합니다. 거래비용·세금·슬리피지는 단순화되어 있으며, 최종 투자 판단과 책임은 투자자 본인에게 있습니다.
+      </p>
+    </footer>
+  </main>
+
+  <!-- 오늘 지표 입력·갱신 모달 -->
+  <div id="input-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
+    <div class="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 sm:p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base sm:text-lg font-extrabold text-white">✏️ 일별 실제 지표 입력 및 N-ADI<sub>v3</sub> 갱신</h3>
+          <p class="text-xs text-slate-400 mt-0.5">입력한 날짜의 거시·VXN 데이터를 반영해 백테스팅 곡선을 즉시 재계산합니다.</p>
+        </div>
+        <button id="btn-close-modal" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <form id="manual-entry-form" class="space-y-3.5 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="inp-date" class="block font-bold text-slate-200 mb-1">대상 날짜 (YYYY-MM-DD)</label>
+            <input id="inp-date" type="date" required class="w-full px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 font-mono text-white" />
+          </div>
+          <div>
+            <label for="inp-g-ndx" class="block font-bold text-slate-200 mb-1">g<sub>NDX,6M</sub>: 나스닥 6M 연율화 (%)</label>
+            <input id="inp-g-ndx" type="number" step="0.01" required class="w-full px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 font-mono text-white" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="inp-g-m2" class="block font-bold text-slate-200 mb-1">g<sub>M2</sub>: 미국 M2 YoY (%)</label>
+            <input id="inp-g-m2" type="number" step="0.01" required class="w-full px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 font-mono text-white" />
+          </div>
+          <div>
+            <label for="inp-m2v" class="block font-bold text-slate-200 mb-1">M2V: 통화유통속도</label>
+            <input id="inp-m2v" type="number" step="0.001" required class="w-full px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 font-mono text-white" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label for="inp-tips" class="block font-bold text-slate-200 mb-1">r<sub>TIPS10</sub> (%)</label>
+            <input id="inp-tips" type="number" step="0.01" required class="w-full px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 font-mono text-white" />
+          </div>
+          <div>
+            <label for="inp-vxn" class="block font-bold text-rose-300 mb-1">VXN 현재치</label>
+            <input id="inp-vxn" type="number" step="0.01" min="5" required class="w-full px-3 py-2 rounded-xl border border-rose-800/70 bg-slate-950 font-mono text-white" />
+          </div>
+          <div>
+            <label for="inp-vxn-ma" class="block font-bold text-cyan-300 mb-1">VXN 20일 이평</label>
+            <input id="inp-vxn-ma" type="number" step="0.01" min="5" required class="w-full px-3 py-2 rounded-xl border border-cyan-800/70 bg-slate-950 font-mono text-white" />
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-emerald-950/60 border border-emerald-700/60 p-3 flex items-center justify-between gap-2">
+          <div>
+            <div class="font-bold text-emerald-200">입력값 기준 즉시 산출 N-ADI<sub>v3</sub></div>
+            <div id="modal-preview-breakdown" class="font-mono text-[11px] text-emerald-300/90 mt-0.5">-</div>
+          </div>
+          <div class="text-right font-mono">
+            <div id="modal-preview-score" class="text-xl font-black text-emerald-400">0.00</div>
+            <div id="modal-preview-alloc" class="text-[11px] text-white font-bold">NDX 50%</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <button id="btn-cancel-modal" type="button" class="px-4 py-2 rounded-xl border border-slate-700 font-semibold text-slate-300 hover:bg-slate-800">
+            취소
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold">
+            저장 및 백테스팅 갱신
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const START_DATE_STR = '2000-01-01';
+    const STORAGE_KEY_OVERRIDES = 'n_adi_v3_custom_entries_v1';
+    const STORAGE_KEY_SIM_DAYS = 'n_adi_v3_sim_extra_days_v1';
+
+    const HISTORICAL_CHECKPOINTS = [
+      ['2000-01-01', 3707.83,  42.0,  6.10, 2.150, 4.25, 45.2, 43.0, 5.50, '2000 닷컴버블 정점 부근'],
+      ['2000-03-10', 4704.73,  56.5,  6.00, 2.160, 4.18, 52.4, 46.5, 5.85, '닷컴버블 사상 최고점 (NDX 4,704)'],
+      ['2000-05-24', 3164.55, -24.5,  5.90, 2.165, 4.10, 61.8, 55.2, 6.25, '닷컴버블 1차 급락 · N-ADI v3 방어 전환'],
+      ['2000-12-20', 2210.32, -48.0,  6.10, 2.130, 3.65, 68.5, 62.0, 6.40, null],
+      ['2001-09-21', 1126.95, -44.0,  9.80, 2.010, 3.10, 74.2, 61.5, 3.00, '9·11 충격 및 IT 침체 심화'],
+      ['2002-10-09',  804.64, -36.5,  6.90, 1.970, 2.45, 64.0, 59.5, 1.75, '2002 닷컴버블 최종 바닥 (NDX -78.4%)'],
+      ['2003-04-15', 1068.50,  16.4,  7.50, 1.940, 1.95, 31.2, 35.8, 1.25, 'VXN 20MA 하회 · 강세장 재진입 트리거'],
+      ['2004-02-15', 1510.20,  28.5,  4.70, 1.985, 1.62, 21.4, 22.8, 1.00, '경기 회복·유동성 확장기'],
+      ['2006-07-15', 1485.60,  -4.2,  4.80, 2.045, 2.48, 22.5, 21.0, 5.25, null],
+      ['2007-10-31', 2238.98,  24.8,  5.90, 1.995, 2.18, 23.8, 22.4, 4.75, '글로벌 금융위기 직전 고점'],
+      ['2008-01-22', 1795.40, -18.5,  6.30, 1.950, 1.55, 34.6, 28.2, 3.50, '서브프라임 충격 · N-ADI v3 방어 전환'],
+      ['2008-09-15', 1716.08, -14.2,  6.20, 1.870, 1.68, 36.8, 29.5, 2.00, '리먼 브라더스 파산 충격'],
+      ['2008-11-20', 1036.51, -52.0,  7.90, 1.780, 2.85, 80.6, 68.4, 0.25, '2008 금융위기 패닉 정점'],
+      ['2009-03-09', 1043.87, -38.5,  9.60, 1.710, 1.82, 51.2, 52.8, 0.15, '금융위기 저점 · QE1 가동'],
+      ['2009-05-15', 1395.20,  22.4,  8.40, 1.720, 1.58, 32.4, 37.5, 0.15, 'VXN 진정 및 6M 모멘텀 양전환 재진입'],
+      ['2010-07-01', 1742.50,  -5.4,  2.10, 1.745, 1.15, 34.5, 31.2, 0.15, null],
+      ['2011-08-08', 2060.40,  -8.2,  9.40, 1.630, 0.12, 46.8, 33.5, 0.10, '미국 신용등급 강등·유로존 위기'],
+      ['2012-09-14', 2855.30,  16.8,  6.80, 1.585, -0.78, 16.4, 17.8, 0.15, 'QE3 개시·마이너스 실질금리 랠리'],
+      ['2014-12-31', 4236.28,  18.5,  5.90, 1.535, 0.48, 17.8, 17.2, 0.10, null],
+      ['2015-08-25', 4016.32,  -6.8,  5.80, 1.505, 0.52, 38.4, 24.6, 0.15, '중국 위안화 쇼크 변동성'],
+      ['2017-12-20', 6472.48,  24.2,  4.80, 1.455, 0.46, 12.1, 13.0, 1.30, '저금리·골디락스 확장기'],
+      ['2018-12-24', 5899.35, -18.6,  3.80, 1.465, 1.12, 36.2, 28.4, 2.35, '2018 연말 연준 긴축 발작'],
+      ['2020-02-19', 9718.73,  34.5,  6.80, 1.430, -0.15, 17.5, 16.8, 1.55, '코로나 직전 최고점'],
+      ['2020-03-23', 6994.29, -22.5, 10.80, 1.350, 0.55, 69.8, 56.4, 0.10, '2020 팬데믹 급락 · 무제한 QE'],
+      ['2020-04-17', 8832.41,  14.2, 16.50, 1.240, -0.42, 38.5, 48.2, 0.10, 'VXN 20MA 급락 하회 · V자 반등 즉시 복원'],
+      ['2021-02-12', 13807.70, 44.0, 26.80, 1.120, -1.02, 24.5, 25.8, 0.10, '유동성 슈퍼 랠리'],
+      ['2021-11-19', 16573.34, 34.8, 13.10, 1.140, -1.12, 19.8, 19.2, 0.10, '2021 고점 (NDX 16,573)'],
+      ['2022-01-21', 14438.40, -6.5, 12.40, 1.155, -0.58, 31.4, 24.2, 0.10, '연준 긴축 시사 · N-ADI v3 선제 방어 전환'],
+      ['2022-06-16', 11127.57, -34.2,  5.80, 1.185, 0.72, 36.5, 34.8, 1.55, '자이언트스텝 금리인상 충격'],
+      ['2022-10-12', 10785.62, -26.8,  1.80, 1.235, 1.68, 35.8, 34.9, 3.10, '2022 금리인상기 저점 (파킹금리 3.1% 방어)'],
+      ['2023-02-02', 12803.14,  14.5, -1.80, 1.275, 1.28, 22.8, 24.5, 4.55, 'AI 랠리 초입 · N-ADI v3 재진입'],
+      ['2023-10-26', 14109.57,  12.4, -3.30, 1.335, 2.48, 23.6, 21.8, 5.33, '실질금리 2.5% 돌파 단기 조정'],
+      ['2024-07-10', 20675.38,  32.6,  1.10, 1.380, 1.88, 16.2, 16.8, 5.33, 'AI 반도체 주도 랠리'],
+      ['2024-08-05', 17895.15,   6.8,  1.60, 1.385, 1.72, 34.8, 22.4, 5.33, '엔캐리 청산 단기 변동성'],
+      ['2025-04-08', 17090.40,  -8.4,  4.10, 1.402, 2.12, 36.2, 26.8, 4.35, '2025 봄 관세·변동성 조정'],
+      ['2025-10-01', 24890.50,  31.2,  4.65, 1.405, 1.75, 18.4, 19.6, 4.10, '2025.10 AI 랠리 고점 (+15.4점 강세)'],
+      ['2026-02-18', 24120.80,  14.8,  5.20, 1.412, 2.08, 21.5, 20.8, 3.85, null],
+      ['2026-05-20', 23680.40,   8.2,  5.45, 1.416, 2.28, 19.8, 19.4, 3.75, null],
+      ['2026-08-20', 22150.20,  -4.6,  5.63, 1.417, 2.68, 25.4, 22.8, 3.75, '실질금리 2.68% 돌파 · 방어 비중 전환'],
+      ['2026-10-21', 20840.60,  -9.8,  5.70, 1.417, 3.04, 31.2, 27.5, 3.75, null],
+      ['2026-11-17', 19980.40,  -8.4,  5.70, 1.417, 3.27, 37.8, 31.4, 3.75, '실질금리 3.27% 할인율 압박 정점'],
+      ['2026-11-20', 20145.80,   4.4,  5.70, 1.417, 2.79, 36.4, 33.8, 3.75, null],
+      ['2026-11-21', 20210.50,   4.5,  5.70, 1.417, 2.79, 34.2, 33.4, 3.75, '2026.11.21 기준점 (N-ADI v3 ≈ -3.10)']
+    ];
+
+    function getDefaultCurrentDateStr() {
+      const sysDate = new Date();
+      const y = sysDate.getFullYear();
+      const m = String(sysDate.getMonth() + 1).padStart(2, '0');
+      const d = String(sysDate.getDate()).padStart(2, '0');
+      const sysStr = `${y}-${m}-${d}`;
+      return sysStr > '2026-11-21' ? sysStr : '2026-11-21';
+    }
+
+    function parseUTCDate(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d));
+    }
+
+    function formatUTCDate(dateObj) {
+      const y = dateObj.getUTCFullYear();
+      const m = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function addDaysToDateStr(dateStr, days) {
+      const dt = parseUTCDate(dateStr);
+      dt.setUTCDate(dt.getUTCDate() + days);
+      return formatUTCDate(dt);
+    }
+
+    function smoothStep(t) {
+      const c = Math.max(0, Math.min(1, t));
+      return 0.5 - 0.5 * Math.cos(Math.PI * c);
+    }
+
+    function seededNoise(seed) {
+      const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    }
+
+    function loadCustomEntries() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_OVERRIDES);
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveCustomEntries(obj) {
+      try {
+        localStorage.setItem(STORAGE_KEY_OVERRIDES, JSON.stringify(obj));
+      } catch (e) {
+        console.warn('localStorage 저장 제한:', e);
+      }
+    }
+
+    function loadSimExtraDays() {
+      try {
+        const n = parseInt(localStorage.getItem(STORAGE_KEY_SIM_DAYS) || '0', 10);
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    function saveSimExtraDays(n) {
+      try {
+        localStorage.setItem(STORAGE_KEY_SIM_DAYS, String(Math.max(0, n)));
+      } catch (e) {
+        console.warn('localStorage 저장 제한:', e);
+      }
+    }
+
+    function buildRawSeries(extraSimDays = 0, mergedEntries = {}) {
+      const startMs = parseUTCDate(START_DATE_STR).getTime();
+      let maxEntryDate = getDefaultCurrentDateStr();
+      Object.keys(mergedEntries || {}).forEach(k => {
+        if (k > maxEntryDate) maxEntryDate = k;
+      });
+      const effectiveEndStr = addDaysToDateStr(maxEntryDate, extraSimDays);
+      const endMs = parseUTCDate(effectiveEndStr).getTime();
+      const dayMs = 86400000;
+
+      const cpList = HISTORICAL_CHECKPOINTS.map(([ds, ndx, g6m, gm2, m2v, tips, vxn, vxnMa, rf, ev]) => ({
+        dateStr: ds,
+        ms: parseUTCDate(ds).getTime(),
+        ndx,
+        g_NDX_6M: g6m,
+        g_M2: gm2,
+        M2V: m2v,
+        r_TIPS10: tips,
+        VXN: vxn,
+        VXN_20MA: vxnMa,
+        rfRate: rf,
+        eventLabel: ev || null
+      }));
+
+      const lastCp = cpList[cpList.length - 1];
+      const series = [];
+      let idx = 0;
+
+      let projNdx = lastCp.ndx;
+      let projG6m = lastCp.g_NDX_6M;
+      let projM2 = lastCp.g_M2;
+      let projM2V = lastCp.M2V;
+      let projTips = lastCp.r_TIPS10;
+      let projVxn = lastCp.VXN;
+      let projVxnMa = lastCp.VXN_20MA;
+      let projRf = lastCp.rfRate;
+
+      for (let ms = startMs; ms <= endMs; ms += dayMs) {
+        const dt = new Date(ms);
+        const dateStr = formatUTCDate(dt);
+        const dow = dt.getUTCDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const dayIndex = Math.round((ms - startMs) / dayMs);
+
+        let ndx, g_NDX_6M, g_M2, M2V, r_TIPS10, VXN, VXN_20MA, rfRate;
+        let eventLabel = null;
+        let isCustom = false;
+
+        if (ms <= lastCp.ms) {
+          let left = cpList[0];
+          let right = cpList[cpList.length - 1];
+          for (let i = 0; i < cpList.length - 1; i++) {
+            if (ms >= cpList[i].ms && ms <= cpList[i + 1].ms) {
+              left = cpList[i];
+              right = cpList[i + 1];
+              break;
+            }
+          }
+
+          const span = Math.max(1, right.ms - left.ms);
+          const rawT = (ms - left.ms) / span;
+          const t = smoothStep(rawT);
+          const linT = 0.65 * rawT + 0.35 * t;
+
+          const wf = isWeekend ? 0.0 : 1.0;
+          const n1 = (seededNoise(dayIndex + 17) - 0.5) * wf;
+          const n2 = (seededNoise(dayIndex + 89) - 0.5) * wf;
+          const n3 = (seededNoise(dayIndex + 233) - 0.5) * wf;
+          const n4 = (seededNoise(dayIndex + 419) - 0.5) * wf;
+
+          const logNdx = Math.log(left.ndx) + (Math.log(right.ndx) - Math.log(left.ndx)) * linT;
+          ndx = Math.exp(logNdx) * (1 + n1 * 0.011);
+
+          g_NDX_6M = left.g_NDX_6M + (right.g_NDX_6M - left.g_NDX_6M) * t + n1 * 1.35;
+          g_M2 = left.g_M2 + (right.g_M2 - left.g_M2) * linT;
+          M2V = left.M2V + (right.M2V - left.M2V) * t;
+          r_TIPS10 = left.r_TIPS10 + (right.r_TIPS10 - left.r_TIPS10) * t + n2 * 0.045;
+          VXN = left.VXN + (right.VXN - left.VXN) * t + n3 * 1.45;
+          VXN_20MA = left.VXN_20MA + (right.VXN_20MA - left.VXN_20MA) * t + n4 * 0.35;
+          rfRate = left.rfRate + (right.rfRate - left.rfRate) * linT;
+
+          const exactCp = cpList.find(cp => cp.dateStr === dateStr);
+          if (exactCp) {
+            ndx = exactCp.ndx;
+            g_NDX_6M = exactCp.g_NDX_6M;
+            g_M2 = exactCp.g_M2;
+            M2V = exactCp.M2V;
+            r_TIPS10 = exactCp.r_TIPS10;
+            VXN = exactCp.VXN;
+            VXN_20MA = exactCp.VXN_20MA;
+            rfRate = exactCp.rfRate;
+            eventLabel = exactCp.eventLabel;
+          }
+        } else {
+          // 2026-11-21 이후: 직전 유효값 유지 (data.json 실제 값이 있으면 아래에서 덮어씀)
+          ndx = projNdx;
+          g_NDX_6M = projG6m;
+          g_M2 = projM2;
+          M2V = projM2V;
+          r_TIPS10 = projTips;
+          VXN = projVxn;
+          VXN_20MA = projVxnMa;
+          rfRate = projRf;
+        }
+
+        if (mergedEntries && mergedEntries[dateStr]) {
+          const ce = mergedEntries[dateStr];
+          if (ce.ndx !== undefined && ce.ndx !== null) ndx = Number(ce.ndx);
+          g_NDX_6M = Number(ce.g_NDX_6M);
+          g_M2 = Number(ce.g_M2);
+          M2V = Number(ce.M2V);
+          r_TIPS10 = Number(ce.r_TIPS10);
+          VXN = Number(ce.VXN);
+          VXN_20MA = Number(ce.VXN_20MA);
+          if (ce.rfRate !== undefined && ce.rfRate !== null) rfRate = Number(ce.rfRate);
+          isCustom = true;
+          eventLabel = ce.eventLabel || eventLabel || (ce.source === 'auto' ? '자동수집 실제 데이터' : '사용자 직접 입력 데이터');
+
+          projNdx = ndx;
+          projG6m = g_NDX_6M;
+          projM2 = g_M2;
+          projM2V = M2V;
+          projTips = r_TIPS10;
+          projVxn = VXN;
+          projVxnMa = VXN_20MA;
+          projRf = rfRate;
+        }
+
+        series.push({
+          index: idx++,
+          date: dateStr,
+          ms,
+          isWeekend,
+          isCustom,
+          eventLabel,
+          ndx: Number(Math.max(300, ndx).toFixed(2)),
+          g_NDX_6M: Number(g_NDX_6M.toFixed(2)),
+          g_M2: Number(g_M2.toFixed(2)),
+          M2V: Number(M2V.toFixed(3)),
+          r_TIPS10: Number(r_TIPS10.toFixed(2)),
+          VXN: Number(Math.max(8.0, VXN).toFixed(2)),
+          VXN_20MA: Number(Math.max(8.0, VXN_20MA).toFixed(2)),
+          rfRate: Number(Math.max(0.05, rfRate).toFixed(2))
+        });
+      }
+
+      return series;
+    }
+
+    function runBacktestSimulation(rawSeries, overrides = { g_NDX_6M: 0, g_M2: 0, M2V: 0, r_TIPS10: 0, VXN: 0, VXN_20MA: 0 }) {
+      const results = [];
+      let eqV3 = 100.0;
+      let eqBH = 100.0;
+      let eqV2 = 100.0;
+
+      for (let i = 0; i < rawSeries.length; i++) {
+        const row = rawSeries[i];
+        const g_NDX_6M = row.g_NDX_6M + overrides.g_NDX_6M;
+        const g_M2 = row.g_M2 + overrides.g_M2;
+        const M2V = row.M2V + overrides.M2V;
+        const r_TIPS10 = row.r_TIPS10 + overrides.r_TIPS10;
+        const VXN = Math.max(6.0, row.VXN + overrides.VXN);
+        const VXN_20MA = Math.max(6.0, row.VXN_20MA + overrides.VXN_20MA);
+
+        const compMom = g_NDX_6M - g_M2;
+        const compM2V = (M2V - 1.40) / 0.10;
+        const compTIPS = -1.5 * (r_TIPS10 - 1.64);
+        const compVXN = -((VXN - VXN_20MA) / 5.0);
+
+        const scoreV3 = compMom + compM2V + compTIPS + compVXN;
+        const legacyScoreV2 = (g_NDX_6M * 0.85 - g_M2) + compM2V - (r_TIPS10 - 1.64) - ((VXN - 22) / 10.0);
+
+        let regime = 'NEUTRAL';
+        let regimeLabel = '중립·혼조';
+        let targetAlloc = 0.50;
+        if (scoreV3 > 2.0) {
+          regime = 'AGGRESSIVE';
+          regimeLabel = '강세·확장';
+          targetAlloc = 1.00;
+        } else if (scoreV3 < -2.0) {
+          regime = 'DEFENSIVE';
+          regimeLabel = '긴축·방어';
+          targetAlloc = 0.10;
+        }
+
+        if (i > 0) {
+          const prev = results[i - 1];
+          const ndxRet = (row.ndx / rawSeries[i - 1].ndx) - 1.0;
+          const dailyRf = (prev.rfRate / 100.0) / 365.0;
+
+          const retV3 = prev.targetAlloc * ndxRet + (1.0 - prev.targetAlloc) * dailyRf;
+          eqV3 = eqV3 * (1.0 + retV3);
+
+          eqBH = eqBH * (1.0 + ndxRet);
+
+          const allocV2 = prev.legacyScoreV2 >= 0 ? 1.0 : 0.0;
+          const retV2 = allocV2 * ndxRet + (1.0 - allocV2) * dailyRf;
+          eqV2 = eqV2 * (1.0 + retV2);
+        }
+
+        const vxnSpread = VXN - VXN_20MA;
+        const isVxnCooling = vxnSpread <= 0;
+
+        results.push({
+          ...row,
+          g_NDX_6M: Number(g_NDX_6M.toFixed(2)),
+          g_M2: Number(g_M2.toFixed(2)),
+          M2V: Number(M2V.toFixed(3)),
+          r_TIPS10: Number(r_TIPS10.toFixed(2)),
+          VXN: Number(VXN.toFixed(2)),
+          VXN_20MA: Number(VXN_20MA.toFixed(2)),
+          compMom: Number(compMom.toFixed(2)),
+          compM2V: Number(compM2V.toFixed(2)),
+          compTIPS: Number(compTIPS.toFixed(2)),
+          compVXN: Number(compVXN.toFixed(2)),
+          score: Number(scoreV3.toFixed(2)),
+          legacyScoreV2: Number(legacyScoreV2.toFixed(2)),
+          regime,
+          regimeLabel,
+          targetAlloc,
+          vxnSpread: Number(vxnSpread.toFixed(2)),
+          isVxnCooling,
+          eqV3: Number(eqV3.toFixed(2)),
+          eqBH: Number(eqBH.toFixed(2)),
+          eqV2: Number(eqV2.toFixed(2))
+        });
+      }
+
+      return results;
+    }
+
+    function computeSeriesMetrics(series, key) {
+      if (!series || series.length < 2) return { cagr: 0, cumPct: 0, mdd: 0 };
+      const startVal = series[0][key];
+      const endVal = series[series.length - 1][key];
+      const years = Math.max(0.1, (series[series.length - 1].ms - series[0].ms) / (365.25 * 86400000));
+      const cagr = (Math.pow(endVal / startVal, 1 / years) - 1) * 100;
+      const cumPct = ((endVal / startVal) - 1) * 100;
+
+      let peak = startVal;
+      let maxDd = 0;
+      for (let i = 0; i < series.length; i++) {
+        const v = series[i][key];
+        if (v > peak) peak = v;
+        const dd = ((v - peak) / peak) * 100;
+        if (dd < maxDd) maxDd = dd;
+      }
+      return {
+        cagr: Number(cagr.toFixed(1)),
+        cumPct: Number(cumPct.toFixed(1)),
+        mdd: Number(maxDd.toFixed(1))
+      };
+    }
+
+    function getRegimeBadgeHTML(regime, label) {
+      if (regime === 'AGGRESSIVE') {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/70">${label}</span>`;
+      }
+      if (regime === 'DEFENSIVE') {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-950 text-rose-300 border border-rose-700/70">${label}</span>`;
+      }
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-950 text-amber-300 border border-amber-700/70">${label}</span>`;
+    }
+
+    function formatSigned(val, decimals = 2, suffix = '') {
+      const n = Number(val);
+      return `${n > 0 ? '+' : ''}${n.toFixed(decimals)}${suffix}`;
+    }
+
+    const state = {
+      remoteEntries: {},
+      remoteUpdatedAt: null,
+      customEntries: loadCustomEntries(),
+      extraSimDays: loadSimExtraDays(),
+      rawSeries: [],
+      series: [],
+      viewStartIdx: 0,
+      viewEndIdx: 0,
+      activePreset: 'ALL',
+      scaleMode: 'LOG',
+      overlays: { c1: false, c2: false, c3: false, c4: false },
+      overrides: { g_NDX_6M: 0, g_M2: 0, M2V: 0, r_TIPS10: 0, VXN: 0, VXN_20MA: 0 },
+      hoverIdx: null,
+      isDragging: false,
+      dragStartX: 0,
+      dragCurrentX: 0,
+      isDraggingMinimap: false,
+      minimapStartX: 0,
+      minimapOrigStartIdx: 0,
+      minimapOrigEndIdx: 0,
+      searchQuery: '',
+      regimeFilter: 'ALL',
+      page: 1,
+      pageSize: 25
+    };
+
+    function getMergedEntries() {
+      return { ...state.remoteEntries, ...state.customEntries };
+    }
+
+    function rebuildAllData(preserveView = false) {
+      const prevLen = state.series.length;
+      const wasAtEnd = prevLen > 0 && state.viewEndIdx >= prevLen - 2;
+
+      state.rawSeries = buildRawSeries(state.extraSimDays, getMergedEntries());
+      state.series = runBacktestSimulation(state.rawSeries, state.overrides);
+
+      const total = state.series.length;
+      if (!preserveView || prevLen === 0) {
+        applyPresetRange(state.activePreset, false);
+      } else if (wasAtEnd) {
+        const span = state.viewEndIdx - state.viewStartIdx;
+        state.viewEndIdx = total - 1;
+        state.viewStartIdx = Math.max(0, state.viewEndIdx - span);
+      } else {
+        state.viewStartIdx = Math.max(0, Math.min(total - 2, state.viewStartIdx));
+        state.viewEndIdx = Math.max(state.viewStartIdx + 1, Math.min(total - 1, state.viewEndIdx));
+      }
+    }
+
+    async function fetchRemoteData(showMessage = false) {
+      const badge = document.getElementById('auto-sync-badge');
+      try {
+        const res = await fetch(`./data.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const payload = await res.json();
+        const entries = payload.daily_entries || {};
+        const formatted = {};
+        Object.entries(entries).forEach(([dt, v]) => {
+          formatted[dt] = { ...v, source: 'auto' };
+        });
+        state.remoteEntries = formatted;
+        state.remoteUpdatedAt = payload.updated_at || null;
+        const count = Object.keys(formatted).length;
+        badge.textContent = `● 자동수집 연동됨 (${count}일 · ${state.remoteUpdatedAt || '최신'})`;
+        badge.className = 'text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-700/70';
+
+        rebuildAllData(true);
+        refreshAll();
+        if (showMessage) showToast(`자동수집 데이터(data.json) 동기화 완료 (총 ${count}일 반영)`);
+      } catch (e) {
+        badge.textContent = '○ 로컬 모드 (data.json 대기)';
+        badge.className = 'text-[11px] font-mono font-semibold px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-700';
+        if (showMessage) showToast('data.json 파일이 아직 없어 기본 기준점 시계열로 동작합니다.');
+      }
+    }
+
+    function applyPresetRange(preset, shouldRender = true) {
+      const total = state.series.length;
+      if (total === 0) return;
+
+      state.activePreset = preset;
+      const latestMs = state.series[total - 1].ms;
+      const dayMs = 86400000;
+
+      if (preset === 'ALL') {
+        state.viewStartIdx = 0;
+        state.viewEndIdx = total - 1;
+      } else {
+        let daysBack = 365;
+        if (preset === '10Y') daysBack = 3652;
+        else if (preset === '5Y') daysBack = 1826;
+        else if (preset === '1Y') daysBack = 365;
+        else if (preset === '3M') daysBack = 92;
+
+        const targetMs = latestMs - daysBack * dayMs;
+        let idx = state.series.findIndex(pt => pt.ms >= targetMs);
+        if (idx < 0) idx = 0;
+        state.viewStartIdx = Math.min(idx, total - 2);
+        state.viewEndIdx = total - 1;
+      }
+
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        const active = btn.dataset.preset === preset;
+        btn.className = active
+          ? 'preset-btn px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 text-emerald-400 transition'
+          : 'preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition';
+      });
+
+      updateSpanLabels();
+      if (shouldRender) renderAllCharts();
+    }
+
+    function jumpToDateRange(startStr, endStr) {
+      let sIdx = state.series.findIndex(d => d.date >= startStr);
+      if (sIdx < 0) sIdx = 0;
+      let eIdx = -1;
+      for (let i = state.series.length - 1; i >= 0; i--) {
+        if (state.series[i].date <= endStr) {
+          eIdx = i;
+          break;
+        }
+      }
+      if (eIdx <= sIdx) eIdx = Math.min(state.series.length - 1, sIdx + 10);
+
+      state.viewStartIdx = sIdx;
+      state.viewEndIdx = eIdx;
+      state.activePreset = 'CUSTOM';
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.className = 'preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition';
+      });
+      updateSpanLabels();
+      renderAllCharts();
+    }
+
+    function updateSpanLabels() {
+      const s = state.series[state.viewStartIdx];
+      const e = state.series[state.viewEndIdx];
+      if (!s || !e) return;
+      const days = state.viewEndIdx - state.viewStartIdx + 1;
+      document.getElementById('chart-visible-span').textContent = `${s.date} ~ ${e.date} (${days.toLocaleString()}일)`;
+      document.getElementById('minimap-hint').textContent = `조회 구간: ${s.date} ~ ${e.date}`;
+    }
+
+    let sharedGeom = null;
+
+    function renderEquityChart() {
+      const canvas = document.getElementById('equityCanvas');
+      const wrapper = document.getElementById('equity-chart-wrapper');
+      if (!canvas || !wrapper) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = wrapper.getBoundingClientRect();
+      const width = Math.max(300, Math.floor(rect.width));
+      const height = Math.max(220, Math.floor(rect.height));
+
+      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+      }
+
+      const ctx = canvas.getContext('2d');
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const pad = { top: 24, right: 20, bottom: 26, left: 58 };
+      const plotW = Math.max(60, width - pad.left - pad.right);
+      const plotH = Math.max(60, height - pad.top - pad.bottom);
+
+      const sIdx = state.viewStartIdx;
+      const eIdx = state.viewEndIdx;
+      const slice = state.series.slice(sIdx, eIdx + 1);
+      if (slice.length < 2) {
+        ctx.restore();
+        return;
+      }
+
+      const baseV3 = slice[0].eqV3;
+      const baseBH = slice[0].eqBH;
+      const baseV2 = slice[0].eqV2;
+
+      const isLog = state.scaleMode === 'LOG';
+      let minVal = Infinity;
+      let maxVal = -Infinity;
+
+      for (let i = 0; i < slice.length; i++) {
+        const v3 = (slice[i].eqV3 / baseV3) * 100;
+        const bh = (slice[i].eqBH / baseBH) * 100;
+        const v2 = (slice[i].eqV2 / baseV2) * 100;
+        minVal = Math.min(minVal, v3, bh, v2);
+        maxVal = Math.max(maxVal, v3, bh, v2);
+      }
+
+      const mapVal = (v) => (isLog ? Math.log10(Math.max(1, v)) : v);
+      let yMinT = mapVal(minVal * 0.90);
+      let yMaxT = mapVal(maxVal * 1.12);
+      if (yMaxT - yMinT < 0.05) yMaxT = yMinT + 0.05;
+
+      const xToPx = (localIdx) => pad.left + (localIdx / (slice.length - 1)) * plotW;
+      const yToPx = (rawEquity) => {
+        const t = mapVal(rawEquity);
+        return pad.top + ((yMaxT - t) / (yMaxT - yMinT)) * plotH;
+      };
+
+      sharedGeom = { pad, plotW, sIdx, eIdx, sliceLen: slice.length };
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(pad.left, pad.top, plotW, plotH);
+      ctx.clip();
+
+      const strideBg = Math.max(1, Math.floor(slice.length / plotW));
+      for (let i = 0; i < slice.length; i += strideBg) {
+        const x1 = xToPx(i);
+        const x2 = xToPx(Math.min(slice.length - 1, i + strideBg));
+        const reg = slice[i].regime;
+        if (reg === 'AGGRESSIVE') ctx.fillStyle = 'rgba(16, 185, 129, 0.07)';
+        else if (reg === 'DEFENSIVE') ctx.fillStyle = 'rgba(244, 63, 94, 0.08)';
+        else ctx.fillStyle = 'rgba(245, 158, 11, 0.04)';
+        ctx.fillRect(x1, pad.top, Math.max(1, x2 - x1 + 0.5), plotH);
+      }
+
+      const tickCount = 5;
+      for (let t = 0; t <= tickCount; t++) {
+        const frac = t / tickCount;
+        const py = pad.top + frac * plotH;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.11)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, py);
+        ctx.lineTo(pad.left + plotW, py);
+        ctx.stroke();
+      }
+
+      let lastMarkerX = -999;
+      ctx.font = '600 10px "Noto Sans KR", Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      for (let i = 0; i < slice.length; i++) {
+        if (!slice[i].eventLabel || slice[i].isCustom) continue;
+        const px = xToPx(i);
+        if (px - lastMarkerX < 95) continue;
+        lastMarkerX = px;
+
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.28)';
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(px, pad.top);
+        ctx.lineTo(px, pad.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const lbl = slice[i].eventLabel.length > 15 ? slice[i].eventLabel.slice(0, 15) + '…' : slice[i].eventLabel;
+        const tw = ctx.measureText(lbl).width;
+        const bx = Math.min(pad.left + plotW - tw - 8, px + 3);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.fillRect(bx, pad.top + 4, tw + 6, 15);
+        ctx.fillStyle = '#6ee7b7';
+        ctx.fillText(lbl, bx + 3, pad.top + 6);
+      }
+
+      const stride = Math.max(1, Math.floor(slice.length / (plotW * 1.5)));
+      function drawCurve(valGetter, color, lw, dash = []) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.setLineDash(dash);
+        ctx.beginPath();
+        for (let i = 0; i < slice.length; i += stride) {
+          const px = xToPx(i);
+          const py = yToPx(valGetter(slice[i]));
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        const last = slice.length - 1;
+        ctx.lineTo(xToPx(last), yToPx(valGetter(slice[last])));
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawCurve(d => (d.eqV2 / baseV2) * 100, '#94a3b8', 1.4, [4, 4]);
+      drawCurve(d => (d.eqBH / baseBH) * 100, '#38bdf8', 1.8, []);
+      drawCurve(d => (d.eqV3 / baseV3) * 100, '#10b981', 2.5, []);
+
+      if (state.isDragging) {
+        const x1 = Math.max(pad.left, Math.min(pad.left + plotW, Math.min(state.dragStartX, state.dragCurrentX)));
+        const x2 = Math.max(pad.left, Math.min(pad.left + plotW, Math.max(state.dragStartX, state.dragCurrentX)));
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+        ctx.fillRect(x1, pad.top, x2 - x1, plotH);
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x1, pad.top, x2 - x1, plotH);
+      }
+
+      if (state.hoverIdx !== null && state.hoverIdx >= sIdx && state.hoverIdx <= eIdx) {
+        const localHover = state.hoverIdx - sIdx;
+        const hx = xToPx(localHover);
+        const hy = yToPx((slice[localHover].eqV3 / baseV3) * 100);
+
+        ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(hx, pad.top);
+        ctx.lineTo(hx, pad.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#10b981';
+        ctx.fill();
+        ctx.strokeStyle = '#020617';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let t = 0; t <= tickCount; t++) {
+        const frac = t / tickCount;
+        const valT = yMaxT - frac * (yMaxT - yMinT);
+        const dispVal = isLog ? Math.pow(10, valT) : valT;
+        const py = pad.top + frac * plotH;
+        const lbl = dispVal >= 1000 ? `${Math.round(dispVal).toLocaleString()}` : dispVal.toFixed(0);
+        ctx.fillText(lbl, pad.left - 8, py);
+      }
+
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`구간 시작=100 (${isLog ? 'Log' : 'Linear'})`, pad.left + 6, pad.top + 6);
+
+      ctx.restore();
+    }
+
+    function renderOscillatorChart() {
+      const canvas = document.getElementById('oscCanvas');
+      const wrapper = document.getElementById('osc-chart-wrapper');
+      if (!canvas || !wrapper) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = wrapper.getBoundingClientRect();
+      const width = Math.max(300, Math.floor(rect.width));
+      const height = Math.max(180, Math.floor(rect.height));
+
+      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+      }
+
+      const ctx = canvas.getContext('2d');
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const pad = { top: 18, right: 20, bottom: 28, left: 58 };
+      const plotW = Math.max(60, width - pad.left - pad.right);
+      const plotH = Math.max(60, height - pad.top - pad.bottom);
+
+      const sIdx = state.viewStartIdx;
+      const eIdx = state.viewEndIdx;
+      const slice = state.series.slice(sIdx, eIdx + 1);
+      if (slice.length < 2) {
+        ctx.restore();
+        return;
+      }
+
+      let yMin = -4.0;
+      let yMax = 4.0;
+      for (let i = 0; i < slice.length; i++) {
+        const pt = slice[i];
+        if (pt.score < yMin) yMin = pt.score;
+        if (pt.score > yMax) yMax = pt.score;
+        if (state.overlays.c1) { yMin = Math.min(yMin, pt.compMom); yMax = Math.max(yMax, pt.compMom); }
+        if (state.overlays.c2) { yMin = Math.min(yMin, pt.compM2V); yMax = Math.max(yMax, pt.compM2V); }
+        if (state.overlays.c3) { yMin = Math.min(yMin, pt.compTIPS); yMax = Math.max(yMax, pt.compTIPS); }
+        if (state.overlays.c4) { yMin = Math.min(yMin, pt.compVXN); yMax = Math.max(yMax, pt.compVXN); }
+      }
+
+      const yPad = Math.max(1.5, (yMax - yMin) * 0.12);
+      yMin = Math.floor((yMin - yPad) / 2) * 2;
+      yMax = Math.ceil((yMax + yPad) / 2) * 2;
+      const ySpan = Math.max(2, yMax - yMin);
+
+      const xToPx = (localIdx) => pad.left + (localIdx / (slice.length - 1)) * plotW;
+      const yToPx = (val) => pad.top + ((yMax - val) / ySpan) * plotH;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(pad.left, pad.top, plotW, plotH);
+      ctx.clip();
+
+      const yPlus2 = yToPx(2.0);
+      const yMinus2 = yToPx(-2.0);
+      const yZero = yToPx(0.0);
+
+      if (yPlus2 > pad.top) {
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.08)';
+        ctx.fillRect(pad.left, pad.top, plotW, Math.min(plotH, yPlus2 - pad.top));
+      }
+      if (yMinus2 < pad.top + plotH) {
+        const topR = Math.max(pad.top, yMinus2);
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.09)';
+        ctx.fillRect(pad.left, topR, plotW, pad.top + plotH - topR);
+      }
+
+      ctx.strokeStyle = 'rgba(52, 211, 153, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, yPlus2);
+      ctx.lineTo(pad.left + plotW, yPlus2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(251, 113, 133, 0.5)';
+      ctx.beginPath();
+      ctx.moveTo(pad.left, yMinus2);
+      ctx.lineTo(pad.left + plotW, yMinus2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(pad.left, yZero);
+      ctx.lineTo(pad.left + plotW, yZero);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const stride = Math.max(1, Math.floor(slice.length / (plotW * 1.5)));
+      function drawOscLine(getter, color, lw, dash = []) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        ctx.setLineDash(dash);
+        ctx.beginPath();
+        for (let i = 0; i < slice.length; i += stride) {
+          const px = xToPx(i);
+          const py = yToPx(getter(slice[i]));
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        const last = slice.length - 1;
+        ctx.lineTo(xToPx(last), yToPx(getter(slice[last])));
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (state.overlays.c1) drawOscLine(d => d.compMom, '#38bdf8', 1.3, [3, 2]);
+      if (state.overlays.c2) drawOscLine(d => d.compM2V, '#a78bfa', 1.3, [2, 2]);
+      if (state.overlays.c3) drawOscLine(d => d.compTIPS, '#fbbf24', 1.3, []);
+      if (state.overlays.c4) drawOscLine(d => d.compVXN, '#fb7185', 1.3, [4, 2]);
+
+      drawOscLine(d => d.score, '#34d399', 2.1, []);
+
+      if (state.isDragging) {
+        const x1 = Math.max(pad.left, Math.min(pad.left + plotW, Math.min(state.dragStartX, state.dragCurrentX)));
+        const x2 = Math.max(pad.left, Math.min(pad.left + plotW, Math.max(state.dragStartX, state.dragCurrentX)));
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+        ctx.fillRect(x1, pad.top, x2 - x1, plotH);
+      }
+
+      if (state.hoverIdx !== null && state.hoverIdx >= sIdx && state.hoverIdx <= eIdx) {
+        const localHover = state.hoverIdx - sIdx;
+        const hx = xToPx(localHover);
+        const hy = yToPx(slice[localHover].score);
+
+        ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(hx, pad.top);
+        ctx.lineTo(hx, pad.top + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#34d399';
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      const stepY = ySpan > 30 ? 10 : ySpan > 15 ? 5 : 2;
+      const firstTick = Math.ceil(yMin / stepY) * stepY;
+      for (let v = firstTick; v <= yMax; v += stepY) {
+        const py = yToPx(v);
+        if (py >= pad.top && py <= pad.top + plotH) {
+          ctx.fillText(v > 0 ? `+${v}` : `${v}`, pad.left - 8, py);
+        }
+      }
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const xTicks = Math.min(8, Math.max(3, Math.floor(plotW / 110)));
+      for (let t = 0; t <= xTicks; t++) {
+        const localIdx = Math.round((t / xTicks) * (slice.length - 1));
+        const pt = slice[localIdx];
+        const px = xToPx(localIdx);
+        const lbl = slice.length > 750 ? pt.date.slice(0, 7) : pt.date;
+        ctx.fillText(lbl, px, pad.top + plotH + 8);
+      }
+
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'left';
+      ctx.fillText('N-ADI_v3 오실레이터 (+2.0 / -2.0 임계선)', pad.left + 6, pad.top + 4);
+
+      ctx.restore();
+    }
+
+    function renderMinimap() {
+      const canvas = document.getElementById('minimapCanvas');
+      const wrapper = document.getElementById('minimap-wrapper');
+      if (!canvas || !wrapper) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = wrapper.getBoundingClientRect();
+      const width = Math.max(200, Math.floor(rect.width));
+      const height = Math.max(36, Math.floor(rect.height));
+
+      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+      }
+
+      const ctx = canvas.getContext('2d');
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const s = state.series;
+      if (s.length < 2) {
+        ctx.restore();
+        return;
+      }
+
+      const minLog = Math.log10(Math.max(10, s[0].eqV3));
+      const maxLog = Math.log10(Math.max(100, s[s.length - 1].eqV3 * 1.2));
+      const span = Math.max(0.5, maxLog - minLog);
+
+      const xToPx = (i) => (i / (s.length - 1)) * width;
+      const yToPx = (v) => 5 + ((maxLog - Math.log10(Math.max(10, v))) / span) * (height - 10);
+
+      const stride = Math.max(1, Math.floor(s.length / width));
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      for (let i = 0; i < s.length; i += stride) {
+        const px = xToPx(i);
+        const py = yToPx(s[i].eqV3);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+
+      const x1 = xToPx(state.viewStartIdx);
+      const x2 = Math.max(x1 + 6, xToPx(state.viewEndIdx));
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.20)';
+      ctx.fillRect(x1, 0, x2 - x1, height);
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x1, 0.75, x2 - x1, height - 1.5);
+
+      ctx.restore();
+    }
+
+    function renderAllCharts() {
+      renderEquityChart();
+      renderOscillatorChart();
+      renderMinimap();
+    }
+
+    function updateKPIsAndBanner() {
+      const s = state.series;
+      if (!s.length) return;
+
+      const first = s[0];
+      const latest = s[s.length - 1];
+
+      document.getElementById('header-range-badge').textContent = `${first.date} – ${latest.date}`;
+      document.getElementById('banner-latest-date').textContent = `기준일: ${latest.date} (총 ${s.length.toLocaleString()}일 누적)`;
+
+      const scoreEl = document.getElementById('banner-latest-score');
+      scoreEl.textContent = formatSigned(latest.score);
+      scoreEl.className = `text-2xl font-black font-mono tabular-nums ${
+        latest.score > 2.0 ? 'text-emerald-400' : latest.score < -2.0 ? 'text-rose-400' : 'text-amber-400'
+      }`;
+      document.getElementById('banner-latest-regime').outerHTML = `<span id="banner-latest-regime">${getRegimeBadgeHTML(latest.regime, latest.regimeLabel)}</span>`;
+
+      const ndxPct = Math.round(latest.targetAlloc * 100);
+      const cashPct = 100 - ndxPct;
+      document.getElementById('banner-latest-alloc').textContent = `NDX ${ndxPct}% / 파킹 ${cashPct}%`;
+
+      const vxnDiff = latest.vxnSpread;
+      document.getElementById('banner-vxn-status').textContent = latest.isVxnCooling
+        ? `VXN ${latest.VXN.toFixed(1)} ≤ 20MA(${latest.VXN_20MA.toFixed(1)}) · 변동성 진정 중`
+        : `VXN ${latest.VXN.toFixed(1)} > 20MA(${latest.VXN_20MA.toFixed(1)}) · 과열 경계 (+${vxnDiff.toFixed(1)}pt)`;
+
+      const mV3 = computeSeriesMetrics(s, 'eqV3');
+      const mBH = computeSeriesMetrics(s, 'eqBH');
+      const mV2 = computeSeriesMetrics(s, 'eqV2');
+
+      document.getElementById('kpi-v3-cagr').textContent = `${mV3.cagr >= 0 ? '+' : ''}${mV3.cagr.toFixed(1)}%`;
+      document.getElementById('kpi-v3-cum').textContent = `${mV3.cumPct >= 0 ? '+' : ''}${Math.round(mV3.cumPct).toLocaleString()}%`;
+      document.getElementById('kpi-v3-mdd').textContent = `${mV3.mdd.toFixed(1)}%`;
+
+      document.getElementById('kpi-bh-cagr').textContent = `${mBH.cagr >= 0 ? '+' : ''}${mBH.cagr.toFixed(1)}%`;
+      document.getElementById('kpi-bh-cum').textContent = `${mBH.cumPct >= 0 ? '+' : ''}${Math.round(mBH.cumPct).toLocaleString()}%`;
+      document.getElementById('kpi-bh-mdd').textContent = `${mBH.mdd.toFixed(1)}%`;
+
+      document.getElementById('kpi-v2-cagr').textContent = `${mV2.cagr >= 0 ? '+' : ''}${mV2.cagr.toFixed(1)}%`;
+      document.getElementById('kpi-v2-cum').textContent = `${mV2.cumPct >= 0 ? '+' : ''}${Math.round(mV2.cumPct).toLocaleString()}%`;
+      document.getElementById('kpi-v2-mdd').textContent = `${mV2.mdd.toFixed(1)}%`;
+
+      document.getElementById('kpi-vxn-spread').textContent = `${formatSigned(vxnDiff, 2)}pt`;
+      document.getElementById('kpi-vxn-spread').className = `text-2xl sm:text-3xl font-black tabular-nums ${
+        latest.isVxnCooling ? 'text-emerald-400' : 'text-amber-400'
+      }`;
+      document.getElementById('kpi-vxn-raw').textContent = `VXN ${latest.VXN.toFixed(1)} / 20MA ${latest.VXN_20MA.toFixed(1)}`;
+      document.getElementById('kpi-vxn-badge').outerHTML = latest.isVxnCooling
+        ? `<span id="kpi-vxn-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/70">진정(하회)</span>`
+        : `<span id="kpi-vxn-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/70">경계(상회)</span>`;
+
+      document.getElementById('kpi-vxn-advice').textContent = latest.isVxnCooling
+        ? 'VXN이 20일선 아래로 진정 · 반등 리밸런싱/단계적 접근 구간'
+        : 'VXN이 20일선 위에서 출렁임 · 바닥 투매 자제 및 진정 대기';
+
+      const baseLatest = runBacktestSimulation([state.rawSeries[state.rawSeries.length - 1]])[0];
+      const deltaScore = Number((latest.score - baseLatest.score).toFixed(2));
+      const isModified = Object.values(state.overrides).some(v => v !== 0);
+
+      const simBadge = document.getElementById('sim-status-badge');
+      simBadge.textContent = isModified ? '오프셋 시뮬레이션 적용 중' : '원본 시계열 반영 중';
+      simBadge.className = isModified
+        ? 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/70'
+        : 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300';
+
+      document.getElementById('sim-latest-score').textContent = formatSigned(latest.score);
+      document.getElementById('sim-latest-delta').textContent = `(원본 대비 ${formatSigned(deltaScore)})`;
+      document.getElementById('sim-latest-alloc').textContent = `NDX ${ndxPct}% / 파킹 ${cashPct}%`;
+    }
+
+    function renderRegimeSummaryTable() {
+      const latestDate = state.series[state.series.length - 1]?.date || '2026-11-21';
+      const periods = [
+        { name: '2000–2002 닷컴버블 붕괴', start: '2000-03-10', end: '2002-10-09', note: '6M 모멘텀 급락 및 고실질금리 포착으로 장기 하락장 현금·파킹 방어' },
+        { name: '2008 글로벌 금융위기', start: '2007-10-31', end: '2009-03-09', note: '리먼 사태 전 -2.0 하회 방어 전환 · 2009 봄 VXN 20MA 하회 시 재진입' },
+        { name: '2020 코로나 팬데믹 급락·반등', start: '2020-02-19', end: '2020-08-31', note: 'VXN이 20일 이평선을 하향 돌파하는 4월 중순 즉시 비중 복원 수혜' },
+        { name: '2022 연준 고강도 금리인상기', start: '2021-11-19', end: '2022-10-12', note: '1.5배 실질금리 가중치로 2022년 1월 선제 축소 + 파킹 금리 수취' },
+        { name: '2025.10–현재 AI 고점 후 긴축장', start: '2025-10-01', end: latestDate, note: 'TIPS 압박 및 변동성 확대 포착 후 NDX 10% / 파킹 90% 방어' }
+      ];
+
+      const tbody = document.getElementById('regime-summary-body');
+      tbody.innerHTML = periods.map(p => {
+        const sub = state.series.filter(d => d.date >= p.start && d.date <= p.end);
+        if (sub.length < 2) return '';
+        const mBH = computeSeriesMetrics(sub, 'eqBH');
+        const mV3 = computeSeriesMetrics(sub, 'eqV3');
+        const mV2 = computeSeriesMetrics(sub, 'eqV2');
+
+        return `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="px-3.5 py-2.5 text-left font-sans font-bold text-slate-100 whitespace-nowrap">
+              <div>${p.name}</div>
+              <div class="text-[11px] font-mono font-normal text-slate-400">${p.start} ~ ${p.end}</div>
+            </td>
+            <td class="px-3.5 py-2.5 text-right whitespace-nowrap ${mBH.cumPct >= 0 ? 'text-sky-400' : 'text-rose-400'}">${formatSigned(mBH.cumPct, 1, '%')}</td>
+            <td class="px-3.5 py-2.5 text-right whitespace-nowrap text-rose-400">${mBH.mdd.toFixed(1)}%</td>
+            <td class="px-3.5 py-2.5 text-right whitespace-nowrap font-extrabold ${mV3.cumPct >= 0 ? 'text-emerald-400' : 'text-amber-300'}">${formatSigned(mV3.cumPct, 1, '%')}</td>
+            <td class="px-3.5 py-2.5 text-right whitespace-nowrap font-bold text-emerald-300">${mV3.mdd.toFixed(1)}%</td>
+            <td class="px-3.5 py-2.5 text-right whitespace-nowrap text-slate-400">${formatSigned(mV2.cumPct, 1, '%')}</td>
+            <td class="px-3.5 py-2.5 text-left font-sans text-slate-300 min-w-[240px]">${p.note}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function getFilteredLogRows() {
+      const q = state.searchQuery.trim().toLowerCase();
+      const rf = state.regimeFilter;
+      const out = [];
+
+      for (let i = state.series.length - 1; i >= 0; i--) {
+        const pt = state.series[i];
+        if (rf === 'CUSTOM' && !pt.isCustom) continue;
+        if (rf === 'VXN_COOLING' && !pt.isVxnCooling) continue;
+        if (rf !== 'ALL' && rf !== 'CUSTOM' && rf !== 'VXN_COOLING' && pt.regime !== rf) continue;
+        if (q) {
+          const mDate = pt.date.includes(q);
+          const mEv = pt.eventLabel && pt.eventLabel.toLowerCase().includes(q);
+          const mReg = pt.regimeLabel.toLowerCase().includes(q);
+          if (!mDate && !mEv && !mReg) continue;
+        }
+        out.push(pt);
+      }
+      return out;
+    }
+
+    function renderLogTable() {
+      const filtered = getFilteredLogRows();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / state.pageSize));
+      if (state.page > totalPages) state.page = totalPages;
+
+      const startIdx = (state.page - 1) * state.pageSize;
+      const rows = filtered.slice(startIdx, startIdx + state.pageSize);
+      const tbody = document.getElementById('adi-table-body');
+
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="11" class="px-4 py-8 text-center font-sans text-slate-400">검색 조건에 해당하는 데이터가 없습니다.</td></tr>`;
+      } else {
+        tbody.innerHTML = rows.map(pt => {
+          const scColor = pt.score > 2.0 ? 'text-emerald-400 font-extrabold' : pt.score < -2.0 ? 'text-rose-400 font-extrabold' : 'text-amber-300 font-bold';
+          const ndxPct = Math.round(pt.targetAlloc * 100);
+          const customTag = pt.isCustom
+            ? `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-700/70 font-sans text-[10px] font-bold">실제</span>`
+            : '';
+
+          return `
+            <tr class="hover:bg-slate-800/60 transition">
+              <td class="px-3 py-2 text-left whitespace-nowrap text-slate-200 font-semibold">${pt.date}${customTag}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap ${scColor}">${formatSigned(pt.score)}</td>
+              <td class="px-3 py-2 text-center whitespace-nowrap font-sans">${getRegimeBadgeHTML(pt.regime, pt.regimeLabel)}</td>
+              <td class="px-3 py-2 text-center whitespace-nowrap font-bold text-white">${ndxPct}% / ${100 - ndxPct}%</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap font-bold text-emerald-400">${pt.eqV3.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap text-sky-400">${pt.eqBH.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap ${pt.compMom >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${formatSigned(pt.compMom)}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap ${pt.compM2V >= 0 ? 'text-violet-400' : 'text-amber-400'}">${formatSigned(pt.compM2V)}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap ${pt.compTIPS >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${formatSigned(pt.compTIPS)}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap ${pt.compVXN >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${formatSigned(pt.compVXN)}</td>
+              <td class="px-3 py-2 text-right whitespace-nowrap text-slate-300">${pt.VXN.toFixed(1)} / ${pt.VXN_20MA.toFixed(1)}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      document.getElementById('table-count-info').textContent = `전체 ${state.series.length.toLocaleString()}일 중 ${filtered.length.toLocaleString()}일 표시`;
+      document.getElementById('page-indicator').textContent = `${state.page.toLocaleString()} / ${totalPages.toLocaleString()}`;
+      document.getElementById('btn-prev-page').disabled = state.page <= 1;
+      document.getElementById('btn-next-page').disabled = state.page >= totalPages;
+    }
+
+    function exportCSV() {
+      try {
+        const rows = getFilteredLogRows();
+        const headers = ['Date','N_ADI_v3','Regime','Target_NDX_Weight','Equity_N_ADI_v3','Equity_NDX_BuyHold','Equity_Legacy_ADI_v2','NDX_Index','Comp_6M_Momentum','Comp_M2V','Comp_1_5x_TIPS','Comp_VXN_Accel','VXN','VXN_20MA','Event'];
+        const lines = [
+          headers.join(','),
+          ...rows.map(pt => [
+            pt.date, pt.score.toFixed(2), `"${pt.regimeLabel}"`, pt.targetAlloc.toFixed(2),
+            pt.eqV3.toFixed(2), pt.eqBH.toFixed(2), pt.eqV2.toFixed(2), pt.ndx.toFixed(2),
+            pt.compMom.toFixed(2), pt.compM2V.toFixed(2), pt.compTIPS.toFixed(2), pt.compVXN.toFixed(2),
+            pt.VXN.toFixed(2), pt.VXN_20MA.toFixed(2), `"${(pt.eventLabel || '').replace(/"/g, '""')}"`
+          ].join(','))
+        ];
+        const latestDate = state.series[state.series.length - 1]?.date || 'latest';
+        const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `N_ADI_v3_Nasdaq_Backtest_2000_to_${latestDate}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(`총 ${rows.length.toLocaleString()}일 N-ADI v3 백테스팅 데이터가 CSV로 저장되었습니다.`);
+      } catch (e) {
+        console.error('CSV 내보내기 오류:', e);
+      }
+    }
+
+    function showToast(msg) {
+      const b = document.getElementById('toast-banner');
+      document.getElementById('toast-message').textContent = msg;
+      b.classList.remove('hidden');
+    }
+
+    function refreshAll() {
+      updateKPIsAndBanner();
+      updateSpanLabels();
+      renderAllCharts();
+      renderRegimeSummaryTable();
+      renderLogTable();
+    }
+
+    function handleChartHover(clientX, clientY, targetWrapper) {
+      if (!sharedGeom) return;
+      const rect = targetWrapper.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const { pad, plotW, sIdx, eIdx } = sharedGeom;
+
+      if (x < pad.left || x > pad.left + plotW) {
+        state.hoverIdx = null;
+        document.getElementById('sync-tooltip').classList.add('hidden');
+        renderAllCharts();
+        return;
+      }
+
+      const ratio = (x - pad.left) / plotW;
+      const localIdx = Math.round(ratio * (eIdx - sIdx));
+      const globalIdx = Math.max(sIdx, Math.min(eIdx, sIdx + localIdx));
+      state.hoverIdx = globalIdx;
+
+      const pt = state.series[globalIdx];
+      if (!pt) return;
+
+      renderEquityChart();
+      renderOscillatorChart();
+
+      const tt = document.getElementById('sync-tooltip');
+      tt.classList.remove('hidden');
+
+      document.getElementById('tt-date').textContent = pt.date;
+      document.getElementById('tt-regime').outerHTML = `<span id="tt-regime">${getRegimeBadgeHTML(pt.regime, pt.regimeLabel)}</span>`;
+
+      const evEl = document.getElementById('tt-event');
+      if (pt.eventLabel) {
+        evEl.textContent = `★ ${pt.eventLabel}`;
+        evEl.classList.remove('hidden');
+      } else {
+        evEl.classList.add('hidden');
+      }
+
+      const scEl = document.getElementById('tt-score');
+      scEl.textContent = formatSigned(pt.score);
+      scEl.className = `text-base font-black ${
+        pt.score > 2.0 ? 'text-emerald-400' : pt.score < -2.0 ? 'text-rose-400' : 'text-amber-400'
+      }`;
+
+      const ndxPct = Math.round(pt.targetAlloc * 100);
+      document.getElementById('tt-alloc').textContent = `NDX ${ndxPct}% / 파킹 ${100 - ndxPct}%`;
+
+      document.getElementById('tt-eq-v3').textContent = `${pt.eqV3.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+      document.getElementById('tt-eq-bh').textContent = `${pt.eqBH.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
+      document.getElementById('tt-ndx-rf').textContent = `${pt.ndx.toLocaleString('en-US', { maximumFractionDigits: 0 })}pt / ${pt.rfRate.toFixed(2)}%`;
+
+      document.getElementById('tt-c1').textContent = `${formatSigned(pt.compMom)} (${pt.g_NDX_6M}%/${pt.g_M2}%)`;
+      document.getElementById('tt-c2').textContent = `${formatSigned(pt.compM2V)} (${pt.M2V.toFixed(3)})`;
+      document.getElementById('tt-c3').textContent = `${formatSigned(pt.compTIPS)} (TIPS ${pt.r_TIPS10}%)`;
+      document.getElementById('tt-c4').textContent = `${formatSigned(pt.compVXN)} (${pt.VXN}/${pt.VXN_20MA})`;
+
+      const containerRect = document.getElementById('dual-chart-container').getBoundingClientRect();
+      const relX = clientX - containerRect.left;
+      const relY = clientY - containerRect.top;
+      const ttW = tt.offsetWidth || 300;
+      const ttH = tt.offsetHeight || 250;
+
+      let leftPos = relX + 16;
+      if (leftPos + ttW > containerRect.width - 10) leftPos = Math.max(10, relX - ttW - 16);
+      let topPos = relY - ttH / 2;
+      topPos = Math.max(8, Math.min(containerRect.height - ttH - 8, topPos));
+
+      tt.style.left = `${leftPos}px`;
+      tt.style.top = `${topPos}px`;
+    }
+
+    function bindChartEvents() {
+      const eqWrap = document.getElementById('equity-chart-wrapper');
+      const oscWrap = document.getElementById('osc-chart-wrapper');
+      const dualContainer = document.getElementById('dual-chart-container');
+      const miniWrap = document.getElementById('minimap-wrapper');
+
+      [eqWrap, oscWrap].forEach(wrap => {
+        wrap.addEventListener('mousedown', (e) => {
+          if (!sharedGeom) return;
+          const rect = wrap.getBoundingClientRect();
+          state.isDragging = true;
+          state.dragStartX = e.clientX - rect.left;
+          state.dragCurrentX = state.dragStartX;
+        });
+
+        wrap.addEventListener('mousemove', (e) => {
+          if (!state.isDragging) handleChartHover(e.clientX, e.clientY, wrap);
+        });
+
+        wrap.addEventListener('dblclick', () => applyPresetRange('ALL', true));
+
+        wrap.addEventListener('touchmove', (e) => {
+          if (e.touches && e.touches.length > 0) handleChartHover(e.touches[0].clientX, e.touches[0].clientY, wrap);
+        }, { passive: true });
+      });
+
+      dualContainer.addEventListener('mouseleave', () => {
+        state.hoverIdx = null;
+        document.getElementById('sync-tooltip').classList.add('hidden');
+        renderEquityChart();
+        renderOscillatorChart();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (state.isDragging && sharedGeom) {
+          const rect = eqWrap.getBoundingClientRect();
+          state.dragCurrentX = e.clientX - rect.left;
+          renderEquityChart();
+          renderOscillatorChart();
+        }
+        if (state.isDraggingMinimap) {
+          const rect = miniWrap.getBoundingClientRect();
+          const total = state.series.length;
+          if (total < 2 || rect.width <= 0) return;
+
+          const dx = e.clientX - state.minimapStartX;
+          const deltaIdx = Math.round((dx / rect.width) * (total - 1));
+          const span = state.minimapOrigEndIdx - state.minimapOrigStartIdx;
+
+          let nextStart = state.minimapOrigStartIdx + deltaIdx;
+          nextStart = Math.max(0, Math.min(total - 1 - span, nextStart));
+          state.viewStartIdx = nextStart;
+          state.viewEndIdx = nextStart + span;
+          state.activePreset = 'CUSTOM';
+
+          document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.className = 'preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition';
+          });
+          updateSpanLabels();
+          renderAllCharts();
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (state.isDragging && sharedGeom) {
+          const { pad, plotW, sIdx, eIdx } = sharedGeom;
+          const x1 = Math.max(pad.left, Math.min(pad.left + plotW, Math.min(state.dragStartX, state.dragCurrentX)));
+          const x2 = Math.max(pad.left, Math.min(pad.left + plotW, Math.max(state.dragStartX, state.dragCurrentX)));
+          state.isDragging = false;
+
+          if (x2 - x1 > 16) {
+            const newStart = sIdx + Math.round(((x1 - pad.left) / plotW) * (eIdx - sIdx));
+            const newEnd = sIdx + Math.round(((x2 - pad.left) / plotW) * (eIdx - sIdx));
+            if (newEnd - newStart >= 5) {
+              state.viewStartIdx = newStart;
+              state.viewEndIdx = newEnd;
+              state.activePreset = 'CUSTOM';
+              document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.className = 'preset-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition';
+              });
+              updateSpanLabels();
+            }
+          }
+          renderAllCharts();
+        }
+        if (state.isDraggingMinimap) state.isDraggingMinimap = false;
+      });
+
+      miniWrap.addEventListener('mousedown', (e) => {
+        const rect = miniWrap.getBoundingClientRect();
+        const total = state.series.length;
+        const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const clickedIdx = Math.round(clickRatio * (total - 1));
+
+        state.isDraggingMinimap = true;
+        state.minimapStartX = e.clientX;
+
+        if (clickedIdx < state.viewStartIdx || clickedIdx > state.viewEndIdx) {
+          const span = Math.max(30, state.viewEndIdx - state.viewStartIdx);
+          const half = Math.floor(span / 2);
+          const newStart = Math.max(0, Math.min(total - 1 - span, clickedIdx - half));
+          state.viewStartIdx = newStart;
+          state.viewEndIdx = newStart + span;
+          updateSpanLabels();
+          renderAllCharts();
+        }
+
+        state.minimapOrigStartIdx = state.viewStartIdx;
+        state.minimapOrigEndIdx = state.viewEndIdx;
+      });
+    }
+
+    function resetWhatIf() {
+      state.overrides = { g_NDX_6M: 0, g_M2: 0, M2V: 0, r_TIPS10: 0, VXN: 0, VXN_20MA: 0 };
+      document.getElementById('slider-g-ndx').value = 0;
+      document.getElementById('slider-g-m2').value = 0;
+      document.getElementById('slider-m2v').value = 0;
+      document.getElementById('slider-tips').value = 0;
+      document.getElementById('slider-vxn').value = 0;
+      document.getElementById('slider-vxn-ma').value = 0;
+
+      document.getElementById('val-g-ndx').textContent = '+0.0%p';
+      document.getElementById('val-g-m2').textContent = '+0.0%p';
+      document.getElementById('val-m2v').textContent = '+0.000';
+      document.getElementById('val-tips').textContent = '+0.00%p';
+      document.getElementById('val-vxn').textContent = '+0.0pt';
+      document.getElementById('val-vxn-ma').textContent = '+0.0pt';
+    }
+
+    function updateModalPreview() {
+      const g6m = parseFloat(document.getElementById('inp-g-ndx').value) || 0;
+      const gm2 = parseFloat(document.getElementById('inp-g-m2').value) || 0;
+      const m2v = parseFloat(document.getElementById('inp-m2v').value) || 1.40;
+      const tips = parseFloat(document.getElementById('inp-tips').value) || 1.64;
+      const vxn = parseFloat(document.getElementById('inp-vxn').value) || 20;
+      const vxnMa = parseFloat(document.getElementById('inp-vxn-ma').value) || 20;
+
+      const c1 = g6m - gm2;
+      const c2 = (m2v - 1.40) / 0.10;
+      const c3 = -1.5 * (tips - 1.64);
+      const c4 = -((vxn - vxnMa) / 5.0);
+      const sc = c1 + c2 + c3 + c4;
+
+      const alloc = sc > 2.0 ? 'NDX 100% / 파킹 0%' : sc < -2.0 ? 'NDX 10% / 파킹 90%' : 'NDX 50% / 파킹 50%';
+      document.getElementById('modal-preview-score').textContent = formatSigned(sc);
+      document.getElementById('modal-preview-alloc').textContent = alloc;
+      document.getElementById('modal-preview-breakdown').textContent =
+        `6M ${formatSigned(c1)} | M2V ${formatSigned(c2)} | TIPS ${formatSigned(c3)} | VXN ${formatSigned(c4)}`;
+    }
+
+    function openModal() {
+      const latest = state.rawSeries[state.rawSeries.length - 1];
+      if (!latest) return;
+      document.getElementById('inp-date').value = latest.date;
+      document.getElementById('inp-g-ndx').value = latest.g_NDX_6M;
+      document.getElementById('inp-g-m2').value = latest.g_M2;
+      document.getElementById('inp-m2v').value = latest.M2V;
+      document.getElementById('inp-tips').value = latest.r_TIPS10;
+      document.getElementById('inp-vxn').value = latest.VXN;
+      document.getElementById('inp-vxn-ma').value = latest.VXN_20MA;
+      updateModalPreview();
+      document.getElementById('input-modal').classList.remove('hidden');
+    }
+
+    function bindEvents() {
+      document.getElementById('btn-sync-remote').addEventListener('click', () => fetchRemoteData(true));
+      document.getElementById('btn-close-toast').addEventListener('click', () => {
+        document.getElementById('toast-banner').classList.add('hidden');
+      });
+
+      document.getElementById('btn-add-one-day').addEventListener('click', () => {
+        state.extraSimDays += 1;
+        saveSimExtraDays(state.extraSimDays);
+        rebuildAllData(true);
+        state.page = 1;
+        refreshAll();
+        const newest = state.series[state.series.length - 1];
+        showToast(`새 일자(${newest.date})가 누적 추가되었습니다. (N-ADI v3 = ${formatSigned(newest.score)})`);
+      });
+
+      document.getElementById('btn-open-modal').addEventListener('click', openModal);
+      document.getElementById('btn-close-modal').addEventListener('click', () => document.getElementById('input-modal').classList.add('hidden'));
+      document.getElementById('btn-cancel-modal').addEventListener('click', () => document.getElementById('input-modal').classList.add('hidden'));
+
+      document.getElementById('inp-date').addEventListener('change', (e) => {
+        const found = state.rawSeries.find(d => d.date === e.target.value);
+        if (found) {
+          document.getElementById('inp-g-ndx').value = found.g_NDX_6M;
+          document.getElementById('inp-g-m2').value = found.g_M2;
+          document.getElementById('inp-m2v').value = found.M2V;
+          document.getElementById('inp-tips').value = found.r_TIPS10;
+          document.getElementById('inp-vxn').value = found.VXN;
+          document.getElementById('inp-vxn-ma').value = found.VXN_20MA;
+          updateModalPreview();
+        }
+      });
+
+      ['inp-g-ndx', 'inp-g-m2', 'inp-m2v', 'inp-tips', 'inp-vxn', 'inp-vxn-ma'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updateModalPreview);
+      });
+
+      document.getElementById('manual-entry-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const dateVal = document.getElementById('inp-date').value;
+        if (!dateVal || dateVal < START_DATE_STR) {
+          showToast('2000-01-01 이후 날짜를 입력해 주세요.');
+          return;
+        }
+        const currLast = state.rawSeries[state.rawSeries.length - 1].date;
+        if (dateVal > currLast) {
+          const diff = Math.round((parseUTCDate(dateVal).getTime() - parseUTCDate(currLast).getTime()) / 86400000);
+          state.extraSimDays += diff;
+          saveSimExtraDays(state.extraSimDays);
+        }
+        state.customEntries[dateVal] = {
+          g_NDX_6M: parseFloat(document.getElementById('inp-g-ndx').value),
+          g_M2: parseFloat(document.getElementById('inp-g-m2').value),
+          M2V: parseFloat(document.getElementById('inp-m2v').value),
+          r_TIPS10: parseFloat(document.getElementById('inp-tips').value),
+          VXN: parseFloat(document.getElementById('inp-vxn').value),
+          VXN_20MA: parseFloat(document.getElementById('inp-vxn-ma').value),
+          source: 'manual'
+        };
+        saveCustomEntries(state.customEntries);
+        rebuildAllData(true);
+        state.page = 1;
+        document.getElementById('input-modal').classList.add('hidden');
+        refreshAll();
+        showToast(`${dateVal} 실제 지표가 반영되어 N-ADI v3 백테스팅 곡선이 재계산되었습니다.`);
+      });
+
+      document.getElementById('btn-reset-all').addEventListener('click', () => {
+        state.customEntries = {};
+        state.extraSimDays = 0;
+        saveCustomEntries({});
+        saveSimExtraDays(0);
+        resetWhatIf();
+
+        state.searchQuery = '';
+        state.regimeFilter = 'ALL';
+        state.page = 1;
+        document.getElementById('table-search').value = '';
+        document.getElementById('table-regime-filter').value = 'ALL';
+
+        Object.keys(state.overlays).forEach(k => (state.overlays[k] = false));
+        document.querySelectorAll('.comp-toggle').forEach(btn => {
+          btn.className = 'comp-toggle px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 font-semibold transition';
+        });
+
+        rebuildAllData(false);
+        applyPresetRange('ALL', false);
+        refreshAll();
+        showToast('수동 입력 및 오프셋이 초기화되었습니다. (자동수집 data.json은 유지)');
+      });
+
+      document.getElementById('btn-scale-log').addEventListener('click', () => {
+        state.scaleMode = 'LOG';
+        document.getElementById('btn-scale-log').className = 'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 transition';
+        document.getElementById('btn-scale-linear').className = 'px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition';
+        renderEquityChart();
+      });
+
+      document.getElementById('btn-scale-linear').addEventListener('click', () => {
+        state.scaleMode = 'LINEAR';
+        document.getElementById('btn-scale-linear').className = 'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 transition';
+        document.getElementById('btn-scale-log').className = 'px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition';
+        renderEquityChart();
+      });
+
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => applyPresetRange(btn.dataset.preset, true));
+      });
+
+      document.querySelectorAll('.jump-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const [sStr, eStr] = btn.dataset.jump.split(',');
+          jumpToDateRange(sStr, eStr);
+        });
+      });
+
+      const compToggleCfg = [
+        { id: 'toggle-c1', key: 'c1', active: 'comp-toggle px-2.5 py-1 rounded-lg border border-sky-500 bg-sky-950/70 text-sky-300 font-bold transition' },
+        { id: 'toggle-c2', key: 'c2', active: 'comp-toggle px-2.5 py-1 rounded-lg border border-violet-500 bg-violet-950/70 text-violet-300 font-bold transition' },
+        { id: 'toggle-c3', key: 'c3', active: 'comp-toggle px-2.5 py-1 rounded-lg border border-amber-500 bg-amber-950/70 text-amber-300 font-bold transition' },
+        { id: 'toggle-c4', key: 'c4', active: 'comp-toggle px-2.5 py-1 rounded-lg border border-rose-500 bg-rose-950/70 text-rose-300 font-bold transition' }
+      ];
+      const baseToggleCls = 'comp-toggle px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 font-semibold transition';
+
+      compToggleCfg.forEach(item => {
+        document.getElementById(item.id).addEventListener('click', (e) => {
+          const next = !state.overlays[item.key];
+          state.overlays[item.key] = next;
+          e.currentTarget.className = next ? item.active : baseToggleCls;
+          renderOscillatorChart();
+        });
+      });
+
+      document.getElementById('btn-reset-whatif').addEventListener('click', () => {
+        resetWhatIf();
+        state.series = runBacktestSimulation(state.rawSeries, state.overrides);
+        refreshAll();
+      });
+
+      const sliders = [
+        { id: 'slider-g-ndx', key: 'g_NDX_6M', lbl: 'val-g-ndx', fmt: v => `${formatSigned(v, 1)}%p` },
+        { id: 'slider-g-m2', key: 'g_M2', lbl: 'val-g-m2', fmt: v => `${formatSigned(v, 1)}%p` },
+        { id: 'slider-m2v', key: 'M2V', lbl: 'val-m2v', fmt: v => formatSigned(v, 3) },
+        { id: 'slider-tips', key: 'r_TIPS10', lbl: 'val-tips', fmt: v => `${formatSigned(v, 2)}%p` },
+        { id: 'slider-vxn', key: 'VXN', lbl: 'val-vxn', fmt: v => `${formatSigned(v, 1)}pt` },
+        { id: 'slider-vxn-ma', key: 'VXN_20MA', lbl: 'val-vxn-ma', fmt: v => `${formatSigned(v, 1)}pt` }
+      ];
+
+      sliders.forEach(sl => {
+        const el = document.getElementById(sl.id);
+        el.addEventListener('input', () => {
+          const val = parseFloat(el.value);
+          state.overrides[sl.key] = val;
+          document.getElementById(sl.lbl).textContent = sl.fmt(val);
+          state.series = runBacktestSimulation(state.rawSeries, state.overrides);
+          state.page = 1;
+          refreshAll();
+        });
+      });
+
+      document.getElementById('table-search').addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        state.page = 1;
+        renderLogTable();
+      });
+
+      document.getElementById('table-regime-filter').addEventListener('change', (e) => {
+        state.regimeFilter = e.target.value;
+        state.page = 1;
+        renderLogTable();
+      });
+
+      document.getElementById('btn-prev-page').addEventListener('click', () => {
+        if (state.page > 1) { state.page -= 1; renderLogTable(); }
+      });
+
+      document.getElementById('btn-next-page').addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(getFilteredLogRows().length / state.pageSize));
+        if (state.page < totalPages) { state.page += 1; renderLogTable(); }
+      });
+
+      document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
+      window.addEventListener('resize', renderAllCharts);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      rebuildAllData(false);
+      bindEvents();
+      bindChartEvents();
+      refreshAll();
+      fetchRemoteData(false);
+    });
+  </script>
+</body>
+</html>
